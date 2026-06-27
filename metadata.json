@@ -1,0 +1,6 @@
+{
+  "name": "Mediador Cabinda",
+  "description": "Plataforma de intermediação de compras, encomendas e transporte de mercadorias entre Cabinda, Luanda e outras províncias de Angola.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
