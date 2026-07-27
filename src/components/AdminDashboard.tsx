@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from '../types';
 import { CARRIER_COMPANIES } from '../data/mockData';
 import { 
   BarChart, 
@@ -37,6 +37,7 @@ import {
   Percent
 } from 'lucide-react';
 import SharedChat from './SharedChat';
+import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
 
 interface AdminDashboardProps {
   clients: Client[];
@@ -65,6 +66,18 @@ interface AdminDashboardProps {
   onUpdateCollaborators: (newColabs: Collaborator[]) => void;
   collaboratorSales: CollaboratorSale[];
   onUpdateCollaboratorSales: (newSales: CollaboratorSale[]) => void;
+
+  // Service props
+  supplierServices: SupplierService[];
+  onUpdateSupplierService: (updatedService: SupplierService) => void;
+  onCreateSupplierService: (newService: SupplierService) => void;
+  serviceRequests: ServiceRequest[];
+  onCreateServiceRequest: (newRequest: ServiceRequest) => void;
+  onUpdateServiceRequest: (updatedRequest: ServiceRequest) => void;
+
+  // Action overrides
+  onChangeRole?: (role: 'client' | 'admin') => void;
+  onChangeView?: (view: 'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria' | 'guia-ajuda') => void;
 }
 
 export default function AdminDashboard({
@@ -89,12 +102,21 @@ export default function AdminDashboard({
   collaborators,
   onUpdateCollaborators,
   collaboratorSales,
-  onUpdateCollaboratorSales
+  onUpdateCollaboratorSales,
+  supplierServices,
+  onUpdateSupplierService,
+  onCreateSupplierService,
+  serviceRequests,
+  onCreateServiceRequest,
+  onUpdateServiceRequest,
+  onChangeRole,
+  onChangeView
 }: AdminDashboardProps) {
   
   // Navigation states
   const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'clients' | 'carriers' | 'complaints' | 'chat' | 'suppliers' | 'collaborators'>('metrics');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orders[0]?.id || null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderStatus | 'TODOS'>('TODOS');
   const [selectedColabId, setSelectedColabId] = useState<string | null>(null);
 
@@ -157,10 +179,24 @@ export default function AdminDashboard({
     availability: 'imediata' as 'imediata' | 'sob-pedido' | 'esgotado',
     stock: 12,
     description: '',
-    photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60'
+    photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
+    location: 'Luanda' as 'Luanda' | 'Cabinda',
+    availableFromDate: 'Imediata (Hoje)'
   });
   const [showAddProductForm, setShowAddProductForm] = useState(true);
   const [showStockGallery, setShowStockGallery] = useState<boolean>(false);
+
+  // Service tab and form states
+  const [supplierSubTab, setSupplierSubTab] = useState<'products' | 'services' | 'requests'>('products');
+  const [showAddServiceForm, setShowAddServiceForm] = useState(false);
+  const [adminNewServiceForm, setAdminNewServiceForm] = useState({
+    name: '',
+    price: 75000,
+    category: 'Despacho Aduaneiro' as 'Despacho Aduaneiro' | 'Transporte de Carga' | 'Compra Assistida' | 'Embalamento e Paletização' | 'Inspeção de Mercadoria' | 'Outros',
+    description: '',
+    photoUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=500&auto=format&fit=crop&q=60',
+    location: 'Luanda' as 'Luanda' | 'Cabinda' | 'Ambos'
+  });
 
   const SYSTEM_STOCK_GALLERY = [
     {
@@ -209,8 +245,23 @@ export default function AdminDashboard({
   const [alertSuccessMessage, setAlertSuccessMessage] = useState<string | null>(null);
   const [alertChannel, setAlertChannel] = useState<'sistema' | 'sms' | 'whatsapp' | 'email'>('sistema');
   const [showTemplatesSelector, setShowTemplatesSelector] = useState<boolean>(false);
-  const [customDialog, setCustomDialog] = useState<{ title: string; message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const [customDialog, setCustomDialog] = useState<{
+    title: string;
+    message: string;
+    type: 'success' | 'info' | 'warning';
+    primaryAction?: {
+      label: string;
+      onClick: () => void;
+    };
+    secondaryActionLabel?: string;
+  } | null>(null);
   const [trackingModalOrder, setTrackingModalOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    if (!adminSelectedSupplierId && suppliers.length > 0) {
+      setAdminSelectedSupplierId(suppliers[0].id);
+    }
+  }, [suppliers, adminSelectedSupplierId]);
 
   const trackingSteps = [
     { status: 'RECEBIDO', title: '1. Pedido Registado', desc: 'Sua solicitação de intermediação entre Cabinda e Luanda foi salva.' },
@@ -568,7 +619,7 @@ export default function AdminDashboard({
   });
 
   return (
-    <div className="space-y-6" id="admin-dashboard-root">
+    <div className="space-y-6 pb-28" id="admin-dashboard-root">
       {/* Top Banner Administration Warning / Demo indicator */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -597,7 +648,26 @@ export default function AdminDashboard({
 
           <button
             onClick={() => {
-              const report = `📊 RELATÓRIO OPERACIONAL & FINANCEIRO\n\n• Volume de Intermediações: ${orders.length} lotes listados\n• Total de Receitas Cobradas (Liquidadas): ${formatCurrency(totalRevenueCollected)}\n• Comissão Bruta do Mediador (Projetada): ${formatCurrency(totalCommissionProfit)}\n• Custo de Frete Marítimo Acumulado: ${formatCurrency(ordersTotalShipping)}\n• Conflitos / Reclamações Pendentes: ${activeComplaints.length} incidentes`;
+              const affiliateShare = totalCommissionProfit * 0.30;
+              const operationalFund = totalCommissionProfit * 0.20;
+              const companyReserve = totalCommissionProfit * 0.50;
+              
+              const report = `📊 RELATÓRIO OPERACIONAL & FINANCEIRO DE MEDIAÇÃO\n` +
+                `--------------------------------------------------\n` +
+                `• Volume de Intermediações: ${orders.length} lotes listados\n` +
+                `• Total de Receitas Cobradas (Liquidadas): ${formatCurrency(totalRevenueCollected)}\n` +
+                `• Comissão Bruta do Mediador (Acumulada): ${formatCurrency(totalCommissionProfit)}\n` +
+                `• Custo de Frete Marítimo Acumulado: ${formatCurrency(ordersTotalShipping)}\n` +
+                `• Conflitos / Reclamações Pendentes: ${activeComplaints.length} incidentes\n\n` +
+                `📋 DISTRIBUIÇÃO ESTRATÉGICA DAS COMISSÕES (Rateio 3% / 2% / 5%):\n` +
+                `--------------------------------------------------\n` +
+                `👥 Fundo de Afiliados (3%): ${formatCurrency(affiliateShare)}\n` +
+                `   (Garante o pagamento automático dos captadores por negócio realizado)\n` +
+                `⚓ Fundo Operacional de Despacho (2%): ${formatCurrency(operationalFund)}\n` +
+                `   (Reserva para despesas aduaneiras e logísticas extras em Luanda)\n` +
+                `🏢 Conta Master da Empresa (5%): ${formatCurrency(companyReserve)}\n` +
+                `   (Destinado ao pagamento de salários dos funcionários fixos, como os representatives locais em Luanda e Cabinda, e reinvestimento)\n\n` +
+                `* Nota do Gestor: Na medida em que o volume de clientes fidelizar, a despesa fixa será totalmente sustentada pelo Fundo Master de 5%, garantindo salários fixos e previsibilidade orçamental.`;
               showModalAlert('Balanço Comercial Extraído', report, 'info');
             }}
             className="bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
@@ -699,7 +769,7 @@ export default function AdminDashboard({
           id="adm-tab-suppliers"
         >
           <Award className="w-4 h-4 shrink-0 text-amber-500" />
-          <span className="truncate flex items-center gap-1">Parceiros & Produtos</span>
+          <span className="truncate flex items-center gap-1">Parceiros (Prod. e Serviços 🛠️)</span>
         </button>
 
         <button
@@ -721,6 +791,42 @@ export default function AdminDashboard({
       {activeTab === 'metrics' && (
         <div className="space-y-6" id="adm-metrics-panel">
           
+          {/* Welcome and Quick Guidance Alert */}
+          <div className="bg-slate-900 border border-slate-800 text-white p-5 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+            <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl"></div>
+            <div className="relative z-10 space-y-1 text-left">
+              <span className="text-[8px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-widest inline-block leading-none">
+                Guia de Gestão Comercial
+              </span>
+              <h3 className="text-sm font-display font-black tracking-tight leading-none text-white">
+                Como publicar Produtos ou Serviços homologados de Parceiros?
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-2xl font-medium">
+                Os serviços de serralharia civil, reparação metálica, frete cooperado ou produtos homologados são publicados sob a licença de nossos parceiros registados. Aceda ao separador <strong className="text-amber-400">Parceiros (Prod. e Serviços 🛠️)</strong> no menu lateral, selecione o parceiro homologado e publique o item de forma integrada.
+              </p>
+            </div>
+            <div className="flex gap-2 relative z-10">
+              <button
+                onClick={() => {
+                  setActiveTab('suppliers');
+                  setSupplierSubTab('products');
+                }}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+              >
+                📦 Publicar Produtos
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('suppliers');
+                  setSupplierSubTab('services');
+                }}
+                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+              >
+                🛠️ Publicar Serviços
+              </button>
+            </div>
+          </div>
+
           {/* Key Stat Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-slate-150 p-5 rounded-2xl shadow-xs">
@@ -987,6 +1093,26 @@ export default function AdminDashboard({
                   <div className="text-right text-xs">
                     <p className="text-[10px] text-slate-400 uppercase font-bold">Data Entrada</p>
                     <p className="font-semibold text-slate-700 mt-0.5">{new Date(activeOrder.createdAt).toLocaleString('pt-AO')}</p>
+                    <div className="mt-3 flex flex-col gap-1.5 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowInvoiceModal(true)}
+                        className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-800 rounded-lg text-[10px] font-black uppercase tracking-wide border border-sky-200 transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                      >
+                        📄 Fatura Digital
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const activeClient = clients.find(c => c.phone === activeOrder.clientPhone || c.name === activeOrder.clientName);
+                          const clientTier = activeClient?.tier || 'Standard';
+                          downloadOrderInvoice(activeOrder, clientTier);
+                        }}
+                        className="px-2.5 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                      >
+                        📥 Descarregar Fatura
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1098,12 +1224,37 @@ export default function AdminDashboard({
                           </select>
                         </div>
 
-                        <div className="sm:col-span-2 p-3 bg-slate-100 rounded-xl space-y-1">
-                          <p className="font-semibold text-slate-800">Cálculo Resumido do Lote:</p>
-                          <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-600 mt-1">
-                            <p>Fornecedor: <strong>{formatCurrency(rawPrice)}</strong></p>
-                            <p>Comissão: <strong>{formatCurrency(rawPrice * commissionRate)}</strong></p>
-                            <p>Total Cliente: <strong className="text-slate-900">{formatCurrency(rawPrice + shippingCost + dispatchFee + (rawPrice * commissionRate))}</strong></p>
+                        <div className="sm:col-span-2 p-3.5 bg-slate-100 rounded-xl space-y-2.5">
+                          <div className="border-b pb-1.5 flex items-center justify-between">
+                            <p className="font-bold text-slate-800 text-xs">Cálculo Resumido do Lote:</p>
+                            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-sm font-semibold">Regras de Rateio Logístico</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-600">
+                            <p>Fornecedor: <strong className="text-slate-900 block mt-0.5">{formatCurrency(rawPrice)}</strong></p>
+                            <p>Comissão ({commissionRate * 100}%): <strong className="text-amber-700 block mt-0.5">{formatCurrency(rawPrice * commissionRate)}</strong></p>
+                            <p>Total Cliente: <strong className="text-slate-950 block mt-0.5 text-xs">{formatCurrency(rawPrice + shippingCost + dispatchFee + (rawPrice * commissionRate))}</strong></p>
+                          </div>
+
+                          <div className="bg-white/80 p-2.5 rounded-lg border border-slate-200/60 space-y-1.5">
+                            <p className="text-[9.5px] uppercase font-bold text-slate-500 tracking-wider">Rateio Interno da Comissão ({commissionRate * 100}%):</p>
+                            <div className="grid grid-cols-3 gap-2 text-[10px] font-medium text-slate-600">
+                              <div className="p-1.5 bg-slate-50 rounded-md">
+                                <span className="text-slate-400 block text-[8px] uppercase font-bold">Afiliado (3%)</span>
+                                <strong className="text-slate-850 font-mono">{(rawPrice * 0.03).toLocaleString('pt-AO')} Kz</strong>
+                              </div>
+                              <div className="p-1.5 bg-slate-50 rounded-md">
+                                <span className="text-slate-400 block text-[8px] uppercase font-bold">Operações / Despacho (2%)</span>
+                                <strong className="text-slate-850 font-mono">{(rawPrice * 0.02).toLocaleString('pt-AO')} Kz</strong>
+                              </div>
+                              <div className="p-1.5 bg-slate-50 rounded-md">
+                                <span className="text-slate-400 block text-[8px] uppercase font-bold">Empresa (Restante)</span>
+                                <strong className="text-slate-850 font-mono">{(rawPrice * (commissionRate - 0.05)).toLocaleString('pt-AO')} Kz</strong>
+                              </div>
+                            </div>
+                            <p className="text-[8.5px] text-slate-400 leading-normal">
+                              * Dos {commissionRate * 100}% cobrados, 3% são reservados garantidamente ao afiliador, 2% complementam despesas logísticas sobressalentes e o restante {(commissionRate - 0.05) * 100}% acumula na conta empresa para salários fixos dos representantes locais.
+                            </p>
                           </div>
                         </div>
 
@@ -1591,7 +1742,7 @@ export default function AdminDashboard({
                                 setTrackingModalOrder(ord);
                                 speak(`Visualizando evolução detalhada da carga ${ord.id} em forma de números.`);
                               }}
-                              className="w-full p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-105 hover:border-slate-205 rounded-xl flex items-center justify-between text-left transition-all group cursor-pointer"
+                              className="w-full p-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 hover:border-slate-300 rounded-xl flex items-center justify-between text-left transition-all group cursor-pointer"
                             >
                               <div className="space-y-1 pr-2 truncate">
                                 <div className="flex items-center gap-1.5">
@@ -1758,7 +1909,7 @@ export default function AdminDashboard({
                             }
                             value={directNotificationText}
                             onChange={(e) => setDirectNotificationText(e.target.value)}
-                            className="flex-1 px-3 py-2 bg-white border border-slate-205 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-305 placeholder:text-slate-400 text-slate-800"
+                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500 placeholder:text-slate-400 text-slate-800"
                             id="direct-quick-alert-input"
                           />
                           <button
@@ -1888,8 +2039,11 @@ export default function AdminDashboard({
                 <label className="block font-bold text-slate-700 mb-1 font-semibold">Preço Estimado por Kg (AOA) *</label>
                 <input
                   type="number"
-                  value={newCarrier.baseRatePerKg}
-                  onChange={(e) => setNewCarrier({ ...newCarrier, baseRatePerKg: parseFloat(e.target.value) || 1200 })}
+                  value={newCarrier.baseRatePerKg === 0 ? '' : newCarrier.baseRatePerKg}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCarrier({ ...newCarrier, baseRatePerKg: val === '' ? 0 : parseFloat(val) || 0 });
+                  }}
                   className="w-full p-2 border border-slate-200 rounded-lg focus:outline-hidden"
                   required
                 />
@@ -1899,8 +2053,11 @@ export default function AdminDashboard({
                 <label className="block font-bold text-slate-700 mb-1 font-semibold">Estimativa Tránsito (Dias)</label>
                 <input
                   type="number"
-                  value={newCarrier.expectedDays}
-                  onChange={(e) => setNewCarrier({ ...newCarrier, expectedDays: parseInt(e.target.value) || 3 })}
+                  value={newCarrier.expectedDays === 0 ? '' : newCarrier.expectedDays}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCarrier({ ...newCarrier, expectedDays: val === '' ? 0 : parseInt(val, 10) || 0 });
+                  }}
                   className="w-full p-2 border border-slate-200 rounded-lg focus:outline-hidden"
                   required
                 />
@@ -2097,21 +2254,71 @@ export default function AdminDashboard({
                     
                     {/* Catalog management header */}
                     <div className="bg-white border border-slate-150 rounded-2xl p-4 shadow-sm space-y-4">
+                      
+                      {/* Catalog management header */}
                       <div className="flex items-center justify-between border-b pb-3 border-slate-100 flex-wrap gap-2">
                         <div>
-                          <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">CATÁLOGO OPERACIONAL DE {curSup.name}</h4>
-                          <p className="text-[11px] text-slate-500 font-semibold mt-1">Sendo o Mediador o publicador exclusivo, você pode gerir o stock abaixo.</p>
+                          <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">MÓDULO DE PARCEIRO: {curSup.name}</h4>
+                          <p className="text-[11px] text-slate-500 font-semibold mt-1">Gerencie produtos homologados, serviços de logística e solicitações.</p>
                         </div>
 
+                        {supplierSubTab === 'products' && (
+                          <button
+                            onClick={() => setShowAddProductForm(!showAddProductForm)}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <span>➕</span> {showAddProductForm ? "Esconder Formulário" : "Publicar Produto"}
+                          </button>
+                        )}
+
+                        {supplierSubTab === 'services' && (
+                          <button
+                            onClick={() => setShowAddServiceForm(!showAddServiceForm)}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <span>➕</span> {showAddServiceForm ? "Esconder Formulário" : "Publicar Serviço"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* SUB-TABS SELECTOR */}
+                      <div className="flex border-b border-slate-100 pb-1 gap-4">
                         <button
-                          onClick={() => setShowAddProductForm(!showAddProductForm)}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+                          onClick={() => setSupplierSubTab('products')}
+                          className={`pb-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                            supplierSubTab === 'products'
+                              ? 'border-amber-500 text-slate-950 font-black'
+                              : 'border-transparent text-slate-400 hover:text-slate-600'
+                          }`}
                         >
-                          <span>➕</span> {showAddProductForm ? "Esconder Formulário" : "Publicar Produto"}
+                          📦 Produtos Homologados ({curProducts.length})
+                        </button>
+                        <button
+                          onClick={() => setSupplierSubTab('services')}
+                          className={`pb-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                            supplierSubTab === 'services'
+                              ? 'border-amber-500 text-slate-950 font-black'
+                              : 'border-transparent text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          🛠️ Serviços Publicados ({supplierServices.filter(s => s.supplierId === curSup.id).length})
+                        </button>
+                        <button
+                          onClick={() => setSupplierSubTab('requests')}
+                          className={`pb-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                            supplierSubTab === 'requests'
+                              ? 'border-amber-500 text-slate-950 font-black'
+                              : 'border-transparent text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          📥 Solicitações ({serviceRequests.filter(r => r.supplierId === curSup.id).length})
                         </button>
                       </div>
 
-                      {/* Add Product Form */}
+                      {supplierSubTab === 'products' && (
+                        <div className="space-y-4 animate-fade-in">
+
+                          {/* Add Product Form */}
                       {showAddProductForm && (
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-slide-up">
                           <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">CADASTRAR E PUBLICAR PRODUTO HOMOLOGADO</p>
@@ -2131,8 +2338,8 @@ export default function AdminDashboard({
                               <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço Base (AOA)</label>
                               <input
                                 type="number"
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400"
-                                value={adminNewProductForm.price}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400 text-slate-800"
+                                value={adminNewProductForm.price === 0 ? '' : adminNewProductForm.price}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, price: Number(e.target.value)})}
                               />
                             </div>
@@ -2140,7 +2347,7 @@ export default function AdminDashboard({
                             <div>
                               <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Estado Disponibilidade</label>
                               <select
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden outline-hidden"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden outline-hidden text-slate-800"
                                 value={adminNewProductForm.availability}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, availability: e.target.value as any})}
                               >
@@ -2154,9 +2361,32 @@ export default function AdminDashboard({
                               <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Quantidade de Stock</label>
                               <input
                                 type="number"
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400"
-                                value={adminNewProductForm.stock}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400 text-slate-800"
+                                value={adminNewProductForm.stock === 0 ? '' : adminNewProductForm.stock}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, stock: Number(e.target.value)})}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Localização Física (Empresa)</label>
+                              <select
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden outline-hidden text-slate-800"
+                                value={adminNewProductForm.location}
+                                onChange={(e) => setAdminNewProductForm({...adminNewProductForm, location: e.target.value as any})}
+                              >
+                                <option value="Luanda">Luanda 📍</option>
+                                <option value="Cabinda">Cabinda 📍</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Quando estará disponível? (Data/Prazo)</label>
+                              <input
+                                type="text"
+                                placeholder="Ex. Imediata (Hoje), Em 3 dias, 12 de Julho..."
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400 text-slate-800"
+                                value={adminNewProductForm.availableFromDate}
+                                onChange={(e) => setAdminNewProductForm({...adminNewProductForm, availableFromDate: e.target.value})}
                               />
                             </div>
 
@@ -2238,10 +2468,47 @@ export default function AdminDashboard({
                                       if (file) {
                                         const reader = new FileReader();
                                         reader.onloadend = () => {
-                                          setAdminNewProductForm({
-                                            ...adminNewProductForm,
-                                            photoUrl: reader.result as string
-                                          });
+                                          const base64Str = reader.result as string;
+                                          const img = new Image();
+                                          img.src = base64Str;
+                                          img.onload = () => {
+                                            const canvas = document.createElement('canvas');
+                                            const MAX_WIDTH = 400;
+                                            const MAX_HEIGHT = 400;
+                                            let width = img.width;
+                                            let height = img.height;
+                                            if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+                                              if (width > height) {
+                                                height = Math.round((height * MAX_WIDTH) / width);
+                                                width = MAX_WIDTH;
+                                              } else {
+                                                width = Math.round((width * MAX_HEIGHT) / height);
+                                                height = MAX_HEIGHT;
+                                              }
+                                            }
+                                            canvas.width = width;
+                                            canvas.height = height;
+                                            const ctx = canvas.getContext('2d');
+                                            if (ctx) {
+                                              ctx.drawImage(img, 0, 0, width, height);
+                                              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                                              setAdminNewProductForm({
+                                                ...adminNewProductForm,
+                                                photoUrl: compressedBase64
+                                              });
+                                            } else {
+                                              setAdminNewProductForm({
+                                                ...adminNewProductForm,
+                                                photoUrl: base64Str
+                                              });
+                                            }
+                                          };
+                                          img.onerror = () => {
+                                            setAdminNewProductForm({
+                                              ...adminNewProductForm,
+                                              photoUrl: base64Str
+                                            });
+                                          };
                                         };
                                         reader.readAsDataURL(file);
                                       }
@@ -2309,7 +2576,7 @@ export default function AdminDashboard({
                               type="button"
                               onClick={() => {
                                 if (!adminNewProductForm.name.trim()) {
-                                  alert("Por favor insira o nome do artigo!");
+                                  showModalAlert("Nome Requerido ⚠️", "Por favor insira o nome do artigo corporativo para prosseguir com a publicação!", "warning");
                                   return;
                                 }
 
@@ -2324,6 +2591,8 @@ export default function AdminDashboard({
                                   stock: adminNewProductForm.stock,
                                   published: true,
                                   sponsored: false,
+                                  location: adminNewProductForm.location,
+                                  availableFromDate: adminNewProductForm.availableFromDate || 'Imediata (Hoje)',
                                   createdAt: new Date().toISOString()
                                 };
 
@@ -2336,10 +2605,25 @@ export default function AdminDashboard({
                                   availability: 'imediata',
                                   stock: 12,
                                   description: '',
-                                  photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60'
+                                  photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
+                                  location: 'Luanda',
+                                  availableFromDate: 'Imediata (Hoje)'
                                 });
                                 setShowAddProductForm(false);
-                                showModalAlert("Anúncio Publicado", `O artigo corporativo "${newProd.name}" foi publicado e incorporado no mercado público de Cabinda.`, "success");
+
+                                setCustomDialog({
+                                  title: "Anúncio Publicado com Sucesso! 🚀",
+                                  message: `O artigo corporativo "${newProd.name}" foi cadastrado no catálogo e publicado com sucesso no mercado de Cabinda.\n\nDeseja alternar agora mesmo para a aba de Cliente para ver o mercado de artigos e confirmar como o produto ficou visível para compra?`,
+                                  type: "success",
+                                  primaryAction: {
+                                    label: "Sim, Ir Ver no Mercado ➔",
+                                    onClick: () => {
+                                      if (onChangeRole) onChangeRole('client');
+                                      if (onChangeView) onChangeView('mercado-fornecedores');
+                                    }
+                                  },
+                                  secondaryActionLabel: "Permanecer na Gestão"
+                                });
                               }}
                               className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black cursor-pointer shadow-xs transition-colors"
                             >
@@ -2372,6 +2656,11 @@ export default function AdminDashboard({
                                         <h5 className="font-bold text-xs text-slate-850 truncate">{prod.name}</h5>
                                         <p className="text-[10px] text-slate-600 font-mono font-bold tracking-tight">{prod.price.toLocaleString('pt-AO')} AOA</p>
                                         
+                                        <div className="text-[9.5px] text-slate-500 font-semibold flex flex-col gap-0.5 my-1">
+                                          <span>📍 Local: <strong>{prod.location || 'Luanda'}</strong></span>
+                                          <span>📅 Disp.: <strong>{prod.availableFromDate || 'Imediata (Hoje)'}</strong></span>
+                                        </div>
+
                                         <div className="flex flex-wrap items-center gap-1">
                                           <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase truncate ${
                                             prod.availability === 'imediata' ? 'bg-emerald-100 text-emerald-800' :
@@ -2438,6 +2727,310 @@ export default function AdminDashboard({
                         </div>
                       </details>
                     </div>
+                  )}
+
+                  {/* TAB CONTENT: SERVICES */}
+                  {supplierSubTab === 'services' && (
+                    <div className="space-y-4 animate-fade-in text-slate-800">
+                      {/* Add Service Form */}
+                      {showAddServiceForm && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-slide-up text-slate-800">
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider text-left">CADASTRAR E PUBLICAR SERVIÇO DE LOGÍSTICA</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="text-left">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Nome do Serviço</label>
+                              <input
+                                type="text"
+                                placeholder="Ex. Despacho Aduaneiro Expresso"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400 text-slate-850"
+                                value={adminNewServiceForm.name}
+                                onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, name: e.target.value})}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço Estimado / Base (AOA)</label>
+                              <input
+                                type="number"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400 text-slate-850"
+                                value={adminNewServiceForm.price}
+                                onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, price: Number(e.target.value)})}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Categoria do Serviço</label>
+                              <select
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden text-slate-850"
+                                value={adminNewServiceForm.category}
+                                onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, category: e.target.value as any})}
+                              >
+                                <option value="Despacho Aduaneiro">Despacho Aduaneiro</option>
+                                <option value="Transporte de Carga">Transporte de Carga</option>
+                                <option value="Compra Assistida">Compra Assistida</option>
+                                <option value="Embalamento e Paletização">Embalamento e Paletização</option>
+                                <option value="Inspeção de Mercadoria">Inspeção de Mercadoria</option>
+                                <option value="Outros">Outros</option>
+                              </select>
+                            </div>
+                            <div className="text-left">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Local de Atendimento</label>
+                              <select
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden text-slate-850"
+                                value={adminNewServiceForm.location}
+                                onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, location: e.target.value as any})}
+                              >
+                                <option value="Luanda">Luanda 📍</option>
+                                <option value="Cabinda">Cabinda 📍</option>
+                                <option value="Ambos">Ambos / Conexão 📍</option>
+                              </select>
+                            </div>
+                            <div className="sm:col-span-2 text-left">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Descrição Curta</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Descreva o que está incluído no serviço..."
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400 text-slate-850"
+                                value={adminNewServiceForm.description}
+                                onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, description: e.target.value})}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!adminNewServiceForm.name) {
+                                  showModalAlert('Campos requeridos', 'Por favor, indique o nome do serviço.', 'warning');
+                                  return;
+                                }
+                                const newS: SupplierService = {
+                                  id: 'srv-' + Date.now(),
+                                  supplierId: curSup.id,
+                                  supplierName: curSup.name,
+                                  name: adminNewServiceForm.name,
+                                  price: adminNewServiceForm.price,
+                                  category: adminNewServiceForm.category,
+                                  description: adminNewServiceForm.description,
+                                  location: adminNewServiceForm.location,
+                                  photoUrl: adminNewServiceForm.photoUrl,
+                                  published: true,
+                                  createdAt: new Date().toISOString()
+                                };
+                                onCreateSupplierService(newS);
+                                setAdminNewServiceForm({
+                                  name: '',
+                                  price: 75000,
+                                  category: 'Despacho Aduaneiro',
+                                  description: '',
+                                  photoUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=500&auto=format&fit=crop&q=60',
+                                  location: 'Luanda'
+                                });
+                                setShowAddServiceForm(false);
+                                speak('Serviço cadastrado e publicado com sucesso!');
+                                showModalAlert('Serviço Publicado', `O serviço "${newS.name}" foi registado com sucesso para este parceiro.`, 'success');
+                              }}
+                              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs cursor-pointer transition-colors"
+                            >
+                              Publicar Serviço Ativo
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Services listing details box */}
+                      <details className="group border border-slate-150 rounded-2xl bg-slate-50/50 p-4 transition-all" open>
+                        <summary className="list-none flex items-center justify-between cursor-pointer font-black text-xs text-slate-500 uppercase tracking-widest select-none">
+                          <span className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
+                            🛠️ Serviços Ativos e Publicados ({supplierServices.filter(s => s.supplierId === curSup.id).length})
+                          </span>
+                          <span className="text-sm text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                        </summary>
+
+                        <div className="space-y-3 pt-4 mt-4 border-t border-slate-200">
+                          {supplierServices.filter(s => s.supplierId === curSup.id).length === 0 ? (
+                            <p className="text-xs text-slate-400 py-4 italic text-center">Nenhum serviço publicado para este parceiro comercial. Use o botão acima para publicar o primeiro.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {supplierServices.filter(s => s.supplierId === curSup.id).map(srv => (
+                                <div key={srv.id} className="bg-white p-3 rounded-2xl border border-slate-150 flex flex-col justify-between gap-3 text-slate-800 shadow-2xs">
+                                  <div className="flex gap-3 text-left">
+                                    <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0 font-bold border">
+                                      🛠️
+                                    </div>
+                                    <div className="space-y-1 overflow-hidden">
+                                      <h5 className="font-bold text-xs text-slate-850 truncate">{srv.name}</h5>
+                                      <p className="text-[10px] text-slate-650 font-mono font-bold tracking-tight">{srv.price.toLocaleString('pt-AO')} AOA (Estimado)</p>
+                                      <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">{srv.description}</p>
+                                      <div className="text-[9.5px] text-slate-500 font-semibold flex flex-col gap-0.5 my-1">
+                                        <span>📍 Atendimento: <strong>{srv.location || 'Luanda'}</strong></span>
+                                        <span>🏷️ Categoria: <strong>{srv.category}</strong></span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-1.5 border-t border-slate-200/60 pt-2 flex-wrap items-center justify-between font-semibold">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateSupplierService({ ...srv, published: !srv.published });
+                                        speak('Estado do serviço atualizado!');
+                                      }}
+                                      className={`px-2 py-1 border rounded-lg text-[9px] font-extrabold uppercase cursor-pointer ${
+                                        srv.published 
+                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-250' 
+                                          : 'bg-slate-200 text-slate-650 border-slate-350'
+                                      }`}
+                                    >
+                                      {srv.published ? "Ativo ✅" : "Pausado 🚫"}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (confirm("Deseja realmente eliminar permanentemente este serviço?")) {
+                                          onUpdateSupplierService({ ...srv, published: false });
+                                          speak('Serviço ocultado.');
+                                        }
+                                      }}
+                                      className="text-[9px] text-red-650 hover:underline font-bold cursor-pointer"
+                                    >
+                                      Remover
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+
+                  {/* TAB CONTENT: SERVICE REQUESTS */}
+                  {supplierSubTab === 'requests' && (
+                    <div className="space-y-4 animate-fade-in text-slate-800">
+                      <div className="border border-slate-150 rounded-2xl bg-slate-50/50 p-4">
+                        <h5 className="font-black text-xs text-slate-500 uppercase tracking-widest mb-3 text-left">
+                          📥 Pedidos de Serviço Solicitados por Clientes ({serviceRequests.filter(r => r.supplierId === curSup.id).length})
+                        </h5>
+
+                        <div className="space-y-3">
+                          {serviceRequests.filter(r => r.supplierId === curSup.id).length === 0 ? (
+                            <p className="text-xs text-slate-400 py-8 italic text-center">Nenhuma solicitação de serviço recebida de clientes para este fornecedor.</p>
+                          ) : (
+                            serviceRequests.filter(r => r.supplierId === curSup.id).map(req => {
+                              const statusColors = {
+                                pendente: 'bg-amber-100 text-amber-800',
+                                em_analise: 'bg-blue-100 text-blue-800',
+                                aprovado: 'bg-emerald-100 text-emerald-800',
+                                cancelado: 'bg-red-100 text-red-800',
+                                concluido: 'bg-slate-100 text-slate-800'
+                              }[req.status];
+
+                              return (
+                                <div key={req.id} className="bg-white p-4 rounded-xl border border-slate-150 space-y-3 text-left">
+                                  <div className="flex justify-between items-start flex-wrap gap-2">
+                                    <div>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{req.id} • {new Date(req.createdAt).toLocaleDateString('pt-AO')}</p>
+                                      <h6 className="font-extrabold text-xs text-slate-850">{req.serviceName}</h6>
+                                      <p className="text-xs text-slate-600 font-medium mt-1">Cliente: <strong className="text-slate-800">{req.clientName}</strong> ({req.clientPhone})</p>
+                                    </div>
+                                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${statusColors}`}>
+                                      {req.status.replace('_', ' ')}
+                                    </span>
+                                  </div>
+
+                                  {(req.description || req.notes) && (
+                                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs text-slate-705 text-left">
+                                      <span className="font-bold block text-slate-500 uppercase text-[9px] tracking-wider mb-1">Requisitos do Serviço:</span>
+                                      <p className="italic font-semibold text-slate-700 leading-relaxed">"{req.description || req.notes}"</p>
+                                    </div>
+                                  )}
+
+                                  {req.location && (
+                                    <div className="text-[10px] text-slate-500 font-semibold text-left">
+                                      📍 <strong>Morada de Execução:</strong> {req.location}
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center gap-2 flex-wrap text-xs text-left">
+                                    <span className="font-semibold text-slate-500">Custo Estimado:</span>
+                                    <input
+                                      type="number"
+                                      className="w-32 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-850 focus:outline-hidden focus:border-amber-400"
+                                      value={req.estimatedCost || ''}
+                                      onChange={(e) => {
+                                        onUpdateServiceRequest({ ...req, estimatedCost: Number(e.target.value) });
+                                      }}
+                                      placeholder="AOA"
+                                    />
+                                    <span className="text-[10px] text-slate-400 font-semibold">(Ajustável em tempo real)</span>
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <span className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Resposta / Proposta Comercial (Visível ao Cliente):</span>
+                                    <textarea
+                                      rows={2}
+                                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-amber-400"
+                                      value={req.notes || ''}
+                                      onChange={(e) => {
+                                        onUpdateServiceRequest({ ...req, notes: e.target.value });
+                                      }}
+                                      placeholder="Ex: Proposta técnica aprovada. Iremos iniciar o fabrico metálico em 24h..."
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-2 pt-2 border-t border-slate-100 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateServiceRequest({ ...req, status: 'em_analise' });
+                                        speak('Pedido colocado em análise.');
+                                      }}
+                                      className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-blue-100 transition-colors"
+                                    >
+                                      Analisar 🔍
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateServiceRequest({ ...req, status: 'aprovado' });
+                                        speak('Pedido de serviço aprovado!');
+                                      }}
+                                      className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-emerald-100 transition-colors"
+                                    >
+                                      Aprovar e Enviar Orçamento ✅
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateServiceRequest({ ...req, status: 'concluido' });
+                                        speak('Serviço concluído com sucesso!');
+                                      }}
+                                      className="px-2.5 py-1 bg-slate-100 text-slate-800 border border-slate-200 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-slate-200 transition-colors"
+                                    >
+                                      Concluir 🏆
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateServiceRequest({ ...req, status: 'cancelado' });
+                                        speak('Serviço cancelado.');
+                                      }}
+                                      className="px-2.5 py-1 bg-red-50 text-red-800 border border-red-200 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-red-100 transition-colors"
+                                    >
+                                      Rejeitar ❌
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
 
                     {/* Chat com Fornecedor Direct Box */}
                     <div className="bg-white border border-slate-150 rounded-2xl p-5 shadow-xs space-y-4">
@@ -2658,10 +3251,18 @@ export default function AdminDashboard({
                   <div className="relative">
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       max="100"
-                      value={newColabForm.defaultCommissionPercentage}
-                      onChange={(e) => setNewColabForm({ ...newColabForm, defaultCommissionPercentage: Math.min(100, Math.max(1, parseInt(e.target.value) || 12)) })}
+                      value={newColabForm.defaultCommissionPercentage === 0 ? '' : newColabForm.defaultCommissionPercentage}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setNewColabForm({ ...newColabForm, defaultCommissionPercentage: 0 });
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          setNewColabForm({ ...newColabForm, defaultCommissionPercentage: isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)) });
+                        }
+                      }}
                       className="w-full p-2.5 pl-9 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700 font-black"
                     />
                     <div className="absolute left-3 top-3.5 text-slate-400">
@@ -2832,10 +3433,18 @@ export default function AdminDashboard({
                     <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Percentagem (%) *</label>
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       max="100"
-                      value={newColabSaleForm.collaboratorPercentage}
-                      onChange={(e) => setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: Math.min(100, Math.max(1, parseInt(e.target.value) || 0)) })}
+                      value={newColabSaleForm.collaboratorPercentage === 0 ? '' : newColabSaleForm.collaboratorPercentage}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: 0 });
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)) });
+                        }
+                      }}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden font-black text-slate-750"
                     />
                   </div>
@@ -3153,10 +3762,18 @@ export default function AdminDashboard({
                           <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Fração de Comissionamento (%)</label>
                           <input 
                             type="number" 
-                            min="1"
+                            min="0"
                             max="100"
-                            value={calcPercentage}
-                            onChange={(e) => setCalcPercentage(Math.min(100, Math.max(1, Number(e.target.value))))}
+                            value={calcPercentage === 0 ? '' : calcPercentage}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') {
+                                setCalcPercentage(0);
+                              } else {
+                                const parsed = parseInt(val, 10);
+                                setCalcPercentage(isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)));
+                              }
+                            }}
                             className="bg-slate-950 border border-slate-850 text-slate-100 font-mono font-bold text-xs p-2 rounded-lg w-full focus:outline-hidden text-amber-400"
                           />
                           <span className="text-[9px] text-slate-500 block">Percentual acordado com {colab.name}</span>
@@ -3298,18 +3915,28 @@ export default function AdminDashboard({
                         </button>
                       </td>
                       <td className="p-3.5 text-center">
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Deseja mesmo remover o registo de venda de ${s.clientName}?`)) {
-                              handleDeleteColabSale(s.id);
-                            }
-                          }}
-                          className="p-1.5 text-red-500 hover:bg-red-55 border border-transparent hover:border-red-200 rounded-lg cursor-pointer transition-all w-8 h-8 font-black flex items-center justify-center mx-auto"
-                          title="Excluir registo"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => downloadCollaboratorSaleInvoice(s)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg cursor-pointer transition-all w-8 h-8 flex items-center justify-center"
+                            title="Descarregar Recibo de Comissão Oficial (Fatura)"
+                          >
+                            📥
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Deseja mesmo remover o registo de venda de ${s.clientName}?`)) {
+                                handleDeleteColabSale(s.id);
+                              }
+                            }}
+                            className="p-1.5 text-red-500 hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg cursor-pointer transition-all w-8 h-8 font-black flex items-center justify-center"
+                            title="Excluir registo"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -3514,8 +4141,8 @@ export default function AdminDashboard({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" id="custom-alert-modal">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full border border-slate-250 overflow-hidden animate-scale-up">
             <div className={`p-4 flex items-center gap-3 border-b ${
-              customDialog.type === 'success' ? 'bg-emerald-55 text-emerald-800' :
-              customDialog.type === 'warning' ? 'bg-amber-55 text-amber-800' :
+              customDialog.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
+              customDialog.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800' :
               'bg-slate-100 text-slate-800 border-slate-200'
             }`}>
               <span className="text-lg">
@@ -3524,19 +4151,221 @@ export default function AdminDashboard({
               <h4 className="font-extrabold text-xs uppercase tracking-wider font-display">{customDialog.title}</h4>
             </div>
             
-            <div className="p-5 text-xs text-slate-600 font-semibold leading-relaxed whitespace-pre-line">
+            <div className="p-5 text-xs text-slate-600 font-semibold leading-relaxed whitespace-pre-line text-left">
               {customDialog.message}
             </div>
 
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setCustomDialog(null)}
-                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
-              >
-                Compreendi
-              </button>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              {customDialog.primaryAction ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCustomDialog(null)}
+                    className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    {customDialog.secondaryActionLabel || "Fechar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const action = customDialog.primaryAction?.onClick;
+                      setCustomDialog(null);
+                      if (action) action();
+                    }}
+                    className="px-4 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                  >
+                    <span>{customDialog.primaryAction.label}</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCustomDialog(null)}
+                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                >
+                  Compreendi
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* INVOICE MODAL IN ADMINDASHBOARD */}
+      {showInvoiceModal && activeOrder && (
+        <div className="fixed inset-0 bg-slate-950/90 z-55 flex items-center justify-center p-4 overflow-y-auto" id="adm-invoice-modal">
+          <div id="printable-invoice-wrapper" className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl text-slate-800 leading-normal font-sans animate-scale-up relative my-8">
+             {/* Close Trigger */}
+             <button 
+               type="button" 
+               onClick={() => setShowInvoiceModal(false)}
+               className="hide-on-print absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-700 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer font-bold font-sans text-xs"
+             >
+               ✕
+             </button>
+
+             {/* Document Header */}
+             <div className="border-b border-dashed border-slate-200 pb-5 space-y-3">
+               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                 <div className="flex items-center gap-3">
+                   <div className="bg-amber-400 text-slate-950 px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex flex-col items-center">
+                     <span>MEDIADOR</span>
+                     <span className="text-[7px] text-slate-800 font-bold">CABINDA</span>
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-extrabold text-[12px] text-slate-900 tracking-tight">MEDIADOR CABINDA LDA.</h3>
+                     <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Intermediação Aduaneira & Cabotagem de Carga</p>
+                   </div>
+                 </div>
+
+                 <div className="text-left sm:text-right font-mono text-[9px] text-slate-500 space-y-0.5">
+                   <p className="text-slate-900 font-bold">DOCUMENTO AUXILIAR DE TRANSITÁRIO</p>
+                   <p><strong>Nº Guia:</strong> GUIA-AO-CB-2026-{activeOrder.id.replace('MED-', '')}</p>
+                   <p><strong>Nº Contribuinte (NIF):</strong> 5401129930</p>
+                   <p><strong>Data de Emissão:</strong> {new Date(activeOrder.createdAt).toLocaleDateString('pt-AO')}</p>
+                 </div>
+               </div>
+
+               <div className="bg-amber-400/10 border border-amber-300 p-3 rounded-xl text-[9px] text-amber-900 text-left font-medium leading-relaxed">
+                 Este documento serve como <strong>Fatura Comercial Pró-Forma</strong> e <strong>Guia de Cabotagem Marítima / Aérea</strong> oficial, homologada sob os regulamentos fiscais da AGT, atestando a isenção de dupla tributação interterritorial e alfandegária de trânsito de mercadorias destinadas à província de Cabinda.
+               </div>
+             </div>
+
+             {/* Logistics section */}
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-left">
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Origem em Luanda</p>
+                 <p className="font-extrabold text-slate-800">{activeOrder.supplierName || 'Polo Geral Mediador'}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Contacto:</strong> {activeOrder.supplierPhone || '+244 912 000 111'}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Despacho:</strong> Porto de Luanda, Terminal de Cabotagem Sogester</p>
+               </div>
+
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Destino em Cabinda</p>
+                 <p className="font-extrabold text-slate-800">{activeOrder.clientName}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Telemóvel:</strong> {activeOrder.clientPhone}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Entrega:</strong> {activeOrder.deliveryOption === 'domicilio' ? activeOrder.deliveryAddress : 'Polo Geral Mediador (Rua da Amizade, Cabinda Central)'}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Vetor Reservado:</strong> {activeOrder.shippingCarrier || 'Carga Convencional'}</p>
+               </div>
+             </div>
+
+             {/* Financial Table breakdown */}
+             <div className="space-y-3">
+               <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest text-left">Declaração de Valoração & Custo Aduaneiro</p>
+               <div className="border border-slate-150 rounded-2xl overflow-hidden">
+                 <table className="w-full text-xs text-left">
+                   <thead>
+                     <tr className="bg-slate-50 border-b border-slate-100 text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                       <th className="p-3">Artigo Solicitado</th>
+                       <th className="p-3 text-center">Qt.</th>
+                       <th className="p-3 text-right">Compra Unit. (Kz)</th>
+                       <th className="p-3 text-right">Subtotal (Kz)</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100 text-slate-705">
+                     <tr>
+                       <td className="p-3 font-bold text-slate-900">{activeOrder.productName}</td>
+                       <td className="p-3 text-center font-semibold">{activeOrder.quantity}x</td>
+                       <td className="p-3 text-right font-mono text-[11px]">{(activeOrder.budgetRawPrice || 0).toLocaleString('pt-AO')} Kz</td>
+                       <td className="p-3 text-right font-mono text-[11px]">{(activeOrder.budgetRawPrice || 0).toLocaleString('pt-AO')} Kz</td>
+                     </tr>
+                     <tr className="text-slate-500 text-[11px]">
+                       <td className="p-2.5 pl-3">Frete Marítimo / Aéreo para Cabinda</td>
+                       <td className="p-2.5 text-center">-</td>
+                       <td className="p-2.5 text-right font-mono">-</td>
+                       <td className="p-2.5 text-right font-mono">{(activeOrder.budgetShipping || 0).toLocaleString('pt-AO')} Kz</td>
+                     </tr>
+                     <tr className="text-slate-500 text-[11px]">
+                       <td className="p-2.5 pl-3">Tarifa Aduaneira Faturada (Desembaraço AGT)</td>
+                       <td className="p-2.5 text-center">-</td>
+                       <td className="p-2.5 text-right font-mono">-</td>
+                       <td className="p-2.5 text-right font-mono">{(activeOrder.dispatchFee || 0).toLocaleString('pt-AO')} Kz</td>
+                     </tr>
+                     <tr className="text-slate-500 text-[11px]">
+                       <td className="p-2.5 pl-3 font-sans">Comissão Operacional de Intermediação ({activeOrder.commissionRate !== undefined ? Math.round(activeOrder.commissionRate * 100) : 12}%)</td>
+                       <td className="p-2.5 text-center">-</td>
+                       <td className="p-2.5 text-right font-mono">-</td>
+                       <td className="p-2.5 text-right font-mono">{(activeOrder.commissionAmount || 0).toLocaleString('pt-AO')} Kz</td>
+                     </tr>
+                     <tr className="text-slate-400 text-[9px] bg-slate-50/50">
+                       <td className="p-1.5 pl-6 italic" colSpan={3}>
+                         • Rateio Interno: 3% Captador Afiliado ({Math.round((activeOrder.budgetRawPrice || 0) * 0.03).toLocaleString('pt-AO')} Kz) | 2% Reserva Despacho ({Math.round((activeOrder.budgetRawPrice || 0) * 0.02).toLocaleString('pt-AO')} Kz) | 5% Retenção Sede ({Math.round((activeOrder.budgetRawPrice || 0) * 0.05).toLocaleString('pt-AO')} Kz)
+                       </td>
+                       <td className="p-1.5 text-right font-mono text-slate-500 text-[9px] font-bold">Rateio 3/2/5</td>
+                     </tr>
+                     <tr className="bg-amber-400/5 font-black text-slate-950 border-t">
+                       <td className="p-3" colSpan={2}>LIQUIDAÇÃO FINAL GLOBAL (AOA)</td>
+                       <td className="p-3 text-right" colSpan={2}>
+                         <span className="font-mono text-xs text-amber-700">{(activeOrder.totalAmount || 0).toLocaleString('pt-AO')} Kz</span>
+                       </td>
+                     </tr>
+                   </tbody>
+                 </table>
+               </div>
+             </div>
+
+             {/* Barcode & Security stamp section */}
+             <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-dashed border-slate-200 pt-5">
+               {/* Barcode representation */}
+               <div className="flex flex-col items-start gap-1 p-2 bg-slate-50 border rounded-xl select-none">
+                 <div className="flex items-end gap-[1.5px] h-8 shrink-0 pr-1">
+                   {[1,3,1,1,2,1,2,3,1,3,1,1,2,4,1,2,1,3,1,2,3,1,1,2,1,1,3,1].map((bar, barIdx) => (
+                     <div key={barIdx} className="bg-slate-900" style={{ width: `${bar}px`, height: '100%' }}></div>
+                   ))}
+                 </div>
+                 <span className="font-mono text-[6px] text-slate-500 tracking-wider">GUIA-{activeOrder.id}*2026-AGT-CABINDA-VALIDA*</span>
+               </div>
+
+               {/* QR Code and verified badge */}
+               <div className="flex items-center gap-2">
+                 <div className="bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg text-emerald-800 text-[8px] flex items-center gap-1 font-bold">
+                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                   AUTENTICAÇÃO FISCAL AGT
+                 </div>
+
+                 <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-lg flex flex-wrap p-1 gap-px relative overflow-hidden select-none">
+                   {Array.from({ length: 36 }).map((_, qrIdx) => {
+                     const isFilled = (qrIdx * 9 + 4) % 3 === 0 || qrIdx < 6 || qrIdx > 29;
+                     return (
+                       <div key={qrIdx} className={`w-[4.5px] h-[4.5px] ${isFilled ? 'bg-slate-950' : 'bg-transparent'}`}></div>
+                     );
+                   })}
+                 </div>
+               </div>
+             </div>
+
+             {/* Bottom Action Bar */}
+             <div className="hide-on-print flex flex-wrap gap-2.5 justify-end border-t pt-5">
+               <button 
+                 type="button" 
+                 onClick={() => {
+                   const activeClient = clients.find(c => c.phone === activeOrder.clientPhone || c.name === activeOrder.clientName);
+                   const clientTier = activeClient?.tier || 'Standard';
+                   downloadOrderInvoice(activeOrder, clientTier);
+                 }}
+                 className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-extrabold transition-all cursor-pointer font-sans"
+               >
+                 📥 Descarregar Fatura (HTML)
+               </button>
+               <button 
+                 type="button" 
+                 onClick={() => {
+                   window.print();
+                 }}
+                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer font-sans"
+               >
+                 🖨️ Imprimir / Guardar PDF
+               </button>
+               <button 
+                 type="button" 
+                 onClick={() => {
+                   setShowInvoiceModal(false);
+                 }}
+                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer font-sans"
+               >
+                 Fechar Fatura
+               </button>
+             </div>
           </div>
         </div>
       )}

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale } from '../types';
+import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from '../types';
 import { PROVINCES_OF_ANGOLA, MUNICIPALITIES } from '../data/mockData';
 import { 
   ShoppingBag, 
@@ -43,9 +43,11 @@ import {
   ThumbsUp,
   XCircle,
   Mic,
-  Menu
+  Menu,
+  Wrench
 } from 'lucide-react';
 import SharedChat from './SharedChat';
+import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
 
 interface ClientDashboardProps {
   clients: Client[];
@@ -62,7 +64,7 @@ interface ClientDashboardProps {
   onMarkNotificationRead: (id: string) => void;
 
   // Sidebar Views
-  currentView: 'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria';
+  currentView: 'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria' | 'guia-ajuda' | 'solicitar-servico';
   setCurrentView: (view: any) => void;
   fontSize: 'normal' | 'grande' | 'extra-grande';
   setFontSize: (size: 'normal' | 'grande' | 'extra-grande') => void;
@@ -86,6 +88,12 @@ interface ClientDashboardProps {
   onUpdateCollaborators: (newColabs: Collaborator[]) => void;
   collaboratorSales: CollaboratorSale[];
   onUpdateCollaboratorSales: (newSales: CollaboratorSale[]) => void;
+  supplierServices: SupplierService[];
+  onUpdateSupplierService: (srv: SupplierService) => void;
+  onCreateSupplierService: (srv: SupplierService) => void;
+  serviceRequests: ServiceRequest[];
+  onCreateServiceRequest: (req: ServiceRequest) => void;
+  onUpdateServiceRequest: (req: ServiceRequest) => void;
 }
 
 export default function ClientDashboard({
@@ -122,7 +130,13 @@ export default function ClientDashboard({
   collaborators,
   onUpdateCollaborators,
   collaboratorSales,
-  onUpdateCollaboratorSales
+  onUpdateCollaboratorSales,
+  supplierServices,
+  onUpdateSupplierService,
+  onCreateSupplierService,
+  serviceRequests,
+  onCreateServiceRequest,
+  onUpdateServiceRequest
 }: ClientDashboardProps) {
   
   // Tab/Tracker States
@@ -130,6 +144,13 @@ export default function ClientDashboard({
     orders.find(o => o.clientId === activeClientId)?.id || null
   );
   const [orderDetailTab, setOrderDetailTab] = useState<'tracker' | 'budget' | 'chat'>('tracker');
+
+  // Service Request States
+  const [serviceActiveTab, setServiceActiveTab] = useState<'catalog' | 'my-requests'>('catalog');
+  const [selectedServiceToRequest, setSelectedServiceToRequest] = useState<SupplierService | null>(null);
+  const [serviceReqDesc, setServiceReqDesc] = useState('');
+  const [serviceReqLocation, setServiceReqLocation] = useState('');
+  const [serviceReqPhone, setServiceReqPhone] = useState('');
 
   // Custom visual overlay dialog states to prevent native cut-off clippings
   const [customDialog, setCustomDialog] = useState<{ title: string; message: string; type: 'success' | 'info' | 'warning' } | null>(null);
@@ -206,6 +227,7 @@ export default function ClientDashboard({
   // Suppliers Marketplace Filtering & Integration States
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SupplierProduct | null>(null);
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<'all' | 'Luanda' | 'Cabinda'>('all');
   const [supplierSearchText, setSupplierSearchText] = useState('');
   const [supplierSelectedCategory, setSupplierSelectedCategory] = useState('all');
   const [supplierSelectedCity, setSupplierSelectedCity] = useState('all');
@@ -215,6 +237,8 @@ export default function ClientDashboard({
     supplierName: string;
     supplierId: string;
     photoUrl: string;
+    location?: string;
+    availableFromDate?: string;
   } | null>(null);
 
   // States for sending intermediate messages to suppliers
@@ -229,13 +253,15 @@ export default function ClientDashboard({
   // Auto-populate Order form when user requests to buy from the partner marketplace
   useEffect(() => {
     if (currentView === 'fazer-pedido' && prefilledMarketProduct) {
+      const artLocation = prefilledMarketProduct.location || 'Luanda';
+      const artAvailability = prefilledMarketProduct.availableFromDate || 'Imediata';
       setNewOrderForm({
         productName: prefilledMarketProduct.name,
         quantity: 1,
         supplierName: prefilledMarketProduct.supplierName,
         supplierPhone: '[OCULTO - INTERMEDIAÇÃO OBRIGATÓRIA]',
-        supplierLocation: suppliers.find(s => s.id === prefilledMarketProduct.supplierId)?.city || 'Luanda',
-        notes: `Adquirido através do Mercado de Fornecedores Homologados. ID Fornecedor: ${prefilledMarketProduct.supplierId}. Preço Base: ${prefilledMarketProduct.price.toLocaleString('pt-AO')} AOA.`,
+        supplierLocation: artLocation,
+        notes: `Adquirido através do Mercado de Fornecedores Homologados. ID Fornecedor: ${prefilledMarketProduct.supplierId}. Localização do Artigo: ${artLocation}. Disponibilidade de Envio: ${artAvailability}. Preço Base: ${prefilledMarketProduct.price.toLocaleString('pt-AO')} AOA.`,
         deliveryOption: 'escritorio',
         deliveryAddress: '',
         preferredCarrierId: ''
@@ -648,20 +674,28 @@ export default function ClientDashboard({
     }
   };
 
-  const trackingSteps: { status: OrderStatus; title: string; desc: string }[] = [
-    { status: 'RECEBIDO', title: '1. Pedido Inicial Registado', desc: 'Sua solicitação de intermediação entre Cabinda e Luanda foi salva.' },
-    { status: 'ANALISE', title: '2. Análise de Fornecedores', desc: 'Nossa equipa localiza fisicamente o produto em Luanda de forma fiscal.' },
-    { status: 'ORCADO', title: '3. Orçamento Pronto', desc: 'Preço da compra, freight marítimo/aéreo e despacho aduaneiro calculados.' },
-    { status: 'PAGO', title: '4. Pagamento Processado', desc: 'O montante foi depositado ou pago por Multicaixa e com fatura.' },
-    { status: 'COMPRADO', title: '5. Compra em Luanda', desc: 'A equipa do Mediador comprou o artigo e recolheu a Fatura Oficial.' },
-    { status: 'TRANSPORTE', title: '6. Expedição de Cargas', desc: 'Carga despachada via aérea/marítima de Luanda com a Guia de Carga.' },
-    { status: 'CABINDA', title: '7. Recebido no Polo Cabinda', desc: 'Produto descarregado em perfeitas condições nos depósitos de Cabinda.' },
-    { status: 'LEVANTAMENTO', title: '8. Pronto para Recolha', desc: 'Aguardando o seu levantamento ou em rota de entrega ao domicílio cadastrada.' },
-    { status: 'ENTREGUE', title: '9. Encomenda Entregue', desc: 'Artigo recebido, avaliado e concluído com sucesso total.' }
-  ];
+  const getTrackingSteps = (order: Order | null) => {
+    const origin = order?.supplierLocation || 'Luanda';
+    const isCabindaOrigin = origin.toLowerCase().includes('cabinda');
+    const startProv = isCabindaOrigin ? 'Cabinda' : 'Luanda';
+    const endProv = isCabindaOrigin ? 'Luanda' : 'Cabinda';
 
-  const getCurrentStatusIndex = (status: OrderStatus) => {
-    return trackingSteps.findIndex(step => step.status === status);
+    return [
+      { status: 'RECEBIDO', title: '1. Pedido Inicial Registado', desc: `Sua solicitação de intermediação entre ${startProv} e ${endProv} foi salva.` },
+      { status: 'ANALISE', title: '2. Análise de Fornecedores', desc: `Nossa equipa localiza fisicamente o produto em ${startProv} de forma fiscal.` },
+      { status: 'ORCADO', title: '3. Orçamento Pronto', desc: 'Preço da compra, freight marítimo/aéreo e despacho aduaneiro calculados.' },
+      { status: 'PAGO', title: '4. Pagamento Processado', desc: 'O montante foi depositado ou pago por Multicaixa e com fatura.' },
+      { status: 'COMPRADO', title: `5. Compra em ${startProv}`, desc: `A equipa do Mediador comprou o artigo em ${startProv} e recolheu a Fatura Oficial.` },
+      { status: 'TRANSPORTE', title: '6. Expedição de Cargas', desc: `Carga despachada via aérea/marítima de ${startProv} com a Guia de Carga.` },
+      { status: 'CABINDA', title: `7. Recebido no Polo ${endProv}`, desc: `Produto descarregado em perfeitas condições nos depósitos de ${endProv}.` },
+      { status: 'LEVANTAMENTO', title: '8. Pronto para Recolha', desc: 'Aguardando o seu levantamento ou em rota de entrega ao domicílio cadastrada.' },
+      { status: 'ENTREGUE', title: '9. Encomenda Entregue', desc: 'Artigo recebido, avaliado e concluído com sucesso total.' }
+    ] as const;
+  };
+
+  const getCurrentStatusIndex = (status: OrderStatus, order?: Order | null) => {
+    const activeOrd = order || (selectedOrderId ? clientOrders.find(o => o.id === selectedOrderId) : null);
+    return getTrackingSteps(activeOrd || null).findIndex(step => step.status === status);
   };
 
   // Search Results computed for Home page
@@ -676,11 +710,11 @@ export default function ClientDashboard({
   const isChatActiveView = currentView === 'suporte' || currentView === 'mensagens';
 
   return (
-    <div className={isChatActiveView ? "" : "space-y-6"} id="client-view-layout">
+    <div className={isChatActiveView ? "pb-28" : "space-y-6 p-3 sm:p-0 pb-28"} id="client-view-layout">
       
       {/* 🟢 TOP PERSISTENT STICKY HEADER WITH HAMBURGER MENU */}
       {!isChatActiveView && (
-        <header className="sticky top-0 bg-white border-b border-slate-150 z-40 px-4 py-3.5 flex items-center justify-between shadow-xs rounded-2xl shrink-0" id="client-sticky-nav-header">
+        <header className="sticky top-0 bg-white border-b border-slate-150 z-40 px-4 py-3.5 flex items-center justify-between shadow-none sm:shadow-xs rounded-none sm:rounded-2xl border-x-0 sm:border-x shrink-0" id="client-sticky-nav-header">
           <div className="flex items-center gap-3">
             {/* Hamburger Menu Trigger */}
             <button
@@ -770,6 +804,7 @@ export default function ClientDashboard({
               {[
                 { id: 'inicio', label: 'Ver Catálogo Mediador', icon: ShoppingBag, desc: 'Lista de produtos homologados', highlight: currentView === 'inicio' },
                 { id: 'fazer-pedido', label: 'Pedir Nova Intermediação', icon: PlusCircle, desc: 'Solicitar compra em Luanda', highlight: currentView === 'fazer-pedido' },
+                { id: 'solicitar-servico', label: 'Solicitar Serviço 🛠️', icon: Wrench, desc: 'Pedir serviço de serralharia', highlight: currentView === 'solicitar-servico' },
                 { id: 'acompanhar-pedido', label: 'Acompanhar Meus Pedidos', icon: Truck, desc: 'Ver estado de rotas e guias', highlight: currentView === 'acompanhar-pedido' },
                 { id: 'mensagens', label: 'Central de Apoio & Chats', icon: MessageSquare, desc: 'Conversar com os mediadores', highlight: currentView === 'mensagens' },
                 { id: 'historico', label: 'Histórico de Cargas', icon: Clock, desc: 'Precedentes e faturas pagas', highlight: currentView === 'historico' },
@@ -807,8 +842,9 @@ export default function ClientDashboard({
               })}
               
               <div className="border-t border-slate-100 my-4 pt-4">
-                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider px-3 py-1.5 font-sans">Sobre & Furtos</p>
+                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider px-3 py-1.5 font-sans">Sobre & Ajuda</p>
                 {[
+                  { id: 'guia-ajuda', label: 'Como Funciona & Taxas 💡', icon: HelpCircle, desc: 'Perguntas frequentes e passo-a-passo' },
                   { id: 'minha-conta', label: 'Meu Cadastro / Perfil', icon: User, desc: 'Ver dados de morada e NIF' },
                   { id: 'termos-uso', label: 'Termos e Condições', icon: FileText, desc: 'Salvaguardas alfandegárias' },
                   { id: 'sobre-nos', label: 'Políticas de Intermediação', icon: Info, desc: 'Sobre o Mediador Cabinda' },
@@ -871,15 +907,23 @@ export default function ClientDashboard({
               <span className="text-[8px] bg-slate-950 text-white font-extrabold px-2 py-0.5 rounded-full uppercase tracking-widest inline-block leading-none">
                 Mercadoria Autêntica
               </span>
-              <h2 className="text-lg font-display font-black tracking-tight leading-none text-slate-950">Vitrina de Produtos Luanda</h2>
+              <h2 className="text-lg font-display font-black tracking-tight leading-none text-slate-950">
+                {selectedLocationFilter === 'all' 
+                  ? 'Vitrina Geral de Produtos (Luanda & Cabinda)' 
+                  : `Vitrina de Produtos — Origem ${selectedLocationFilter}`}
+              </h2>
               <p className="text-[10px] text-slate-900 font-medium leading-relaxed max-w-xl">
-                Nós compramos por si física e fiscalmente em Luanda, elaboramos a guia aduaneira e entregamos em Cabinda com segurança máxima anticheat.
+                {selectedLocationFilter === 'Cabinda'
+                  ? 'Nós intermediamos a compra física e fiscal de mercadorias localizadas em Cabinda, organizando a guia aduaneira e entregando em Luanda.'
+                  : selectedLocationFilter === 'Luanda'
+                    ? 'Nós compramos por si física e fiscalmente em Luanda, elaboramos a guia aduaneira e entregamos em Cabinda com segurança total.'
+                    : 'A sua ponte comercial completa: compramos e despachamos mercadorias bidirecionalmente entre Luanda e Cabinda com isenção alfandegária.'}
               </p>
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className="relative" id="product-feed-catalog-search">
+          {/* Search bar & Location Filter Buttons */}
+          <div className="space-y-3" id="product-feed-catalog-search">
             <div className="relative">
               <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
               <input
@@ -887,7 +931,7 @@ export default function ClientDashboard({
                 value={homeSearchQuery}
                 onChange={(e) => setHomeSearchQuery(e.target.value)}
                 placeholder="Pesquise por informática, geradores, cabos de cobre..."
-                className="w-full pl-11 pr-12 py-3 bg-white border border-slate-205 rounded-2xl shadow-xs text-xs font-semibold focus:outline-hidden focus:border-amber-400 focus:ring-0 text-slate-800 transition-colors"
+                className="w-full pl-11 pr-12 py-3 bg-white border border-slate-200 rounded-2xl shadow-xs text-xs font-semibold focus:outline-hidden focus:border-amber-400 focus:ring-0 text-slate-800 transition-colors"
                 id="catalog-product-search-input"
               />
               {homeSearchQuery && (
@@ -900,6 +944,53 @@ export default function ClientDashboard({
                 </button>
               )}
             </div>
+
+            {/* Quick Location Tabs */}
+            <div className="flex gap-2 items-center overflow-x-auto pb-1 scrollbar-thin">
+              <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">Filtrar Origem:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedLocationFilter('all');
+                  speak("Exibindo todos os produtos de Luanda e Cabinda");
+                }}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
+                  selectedLocationFilter === 'all' 
+                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                🌍 Todos ({supplierProducts.filter(p => p.published).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedLocationFilter('Luanda');
+                  speak("Filtrando produtos localizados em Luanda");
+                }}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
+                  selectedLocationFilter === 'Luanda' 
+                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                📍 Luanda ({supplierProducts.filter(p => p.published && (p.location || 'Luanda') === 'Luanda').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedLocationFilter('Cabinda');
+                  speak("Filtrando produtos localizados em Cabinda");
+                }}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
+                  selectedLocationFilter === 'Cabinda' 
+                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                📍 Cabinda ({supplierProducts.filter(p => p.published && p.location === 'Cabinda').length})
+              </button>
+            </div>
           </div>
 
           {/* Products Grid */}
@@ -907,20 +998,20 @@ export default function ClientDashboard({
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-[9px] uppercase font-bold text-slate-400 font-sans tracking-wider">Catálogo Público</span>
               <span className="text-[10px] text-slate-500 font-bold font-mono">
-                {supplierProducts.filter(p => p.published && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length} itens
+                {supplierProducts.filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length} itens
               </span>
             </div>
 
-            {supplierProducts.filter(p => p.published && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length === 0 ? (
+            {supplierProducts.filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length === 0 ? (
               <div className="text-center py-12 bg-white border border-slate-150 rounded-3xl p-6">
                 <span className="text-2xl block mb-2">🔍</span>
                 <p className="text-xs font-bold text-slate-800">Sem correspondências.</p>
-                <p className="text-[10px] text-slate-405 mt-1">Insira outra termo de procura.</p>
+                <p className="text-[10px] text-slate-405 mt-1">Insira outro termo de procura.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4" id="products-catalog-continuous-feed">
                 {supplierProducts
-                  .filter(p => p.published && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(homeSearchQuery.toLowerCase())))
+                  .filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(homeSearchQuery.toLowerCase())))
                   .sort((a, b) => (b.sponsored ? 1 : 0) - (a.sponsored ? 1 : 0))
                   .map((prod) => {
                     const isEsgotado = prod.availability === 'esgotado' || prod.stock === 0;
@@ -1011,7 +1102,7 @@ export default function ClientDashboard({
 
       {/* 2) FAZER PEDIDO (SOLICITAR COMPRA) */}
       {currentView === 'fazer-pedido' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="fazer-pedido-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="fazer-pedido-screen">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-6">
             <div className="bg-amber-100 text-slate-900 p-2.5 rounded-xl">
               <PlusCircle className="w-6 h-6" />
@@ -1041,8 +1132,14 @@ export default function ClientDashboard({
                 <input
                   type="number"
                   min="1"
-                  value={newOrderForm.quantity}
-                  onChange={(e) => setNewOrderForm({ ...newOrderForm, quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                  value={newOrderForm.quantity === 0 ? '' : newOrderForm.quantity}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewOrderForm({ 
+                      ...newOrderForm, 
+                      quantity: val === '' ? 0 : Math.max(1, parseInt(val, 10) || 1) 
+                    });
+                  }}
                   className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-hidden"
                   required
                 />
@@ -1057,7 +1154,20 @@ export default function ClientDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-705 mb-1.5">Fornecedor Sugerido Luanda (Se souber)</label>
+                <label className="block text-xs font-bold text-slate-705 mb-1.5">Localização Física do Fornecedor (Origem) *</label>
+                <select
+                  value={newOrderForm.supplierLocation}
+                  onChange={(e) => setNewOrderForm({ ...newOrderForm, supplierLocation: e.target.value })}
+                  className="w-full text-xs p-3 border border-slate-200 rounded-xl bg-white focus:outline-hidden text-slate-800 font-bold"
+                  required
+                >
+                  <option value="Luanda, Maculusso">Luanda (📍 Enviar para Cabinda)</option>
+                  <option value="Cabinda, Centro">Cabinda (📍 Enviar para Luanda)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-705 mb-1.5">Fornecedor Sugerido (Se souber)</label>
                 <input
                   type="text"
                   value={newOrderForm.supplierName}
@@ -1112,9 +1222,11 @@ export default function ClientDashboard({
                         <input
                           type="number"
                           step="1000"
-                          min="1000"
-                          value={calcRawPrice}
-                          onChange={(e) => setCalcRawPrice(Math.max(1000, parseInt(e.target.value) || 0))}
+                          value={calcRawPrice === 0 ? '' : calcRawPrice}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCalcRawPrice(val === '' ? 0 : Math.max(0, parseInt(val) || 0));
+                          }}
                           className="w-full text-xs p-2.5 border bg-white rounded-lg focus:outline-hidden"
                         />
                         <span className="text-[9px] text-slate-400 mt-1 block">Preço base de loja</span>
@@ -1124,10 +1236,11 @@ export default function ClientDashboard({
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Peso da Carga (Kg)</label>
                         <input
                           type="number"
-                          min="1"
-                          max="2000"
-                          value={calcWeight}
-                          onChange={(e) => setCalcWeight(Math.max(1, parseInt(e.target.value) || 1))}
+                          value={calcWeight === 0 ? '' : calcWeight}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCalcWeight(val === '' ? 0 : Math.max(0, parseInt(val) || 0));
+                          }}
                           className="w-full text-xs p-2.5 border bg-white rounded-lg focus:outline-hidden"
                         />
                         <span className="text-[9px] text-slate-400 mt-1 block">Utilizado no frete</span>
@@ -1307,7 +1420,7 @@ export default function ClientDashboard({
 
                   {/* Options Selector Panel */}
                   {showPhotoOptions && (
-                    <div className="absolute left-0 right-0 mt-2 p-3 bg-white border border-slate-205 rounded-2xl shadow-xl z-50 grid grid-cols-2 gap-2 animate-scale-up" id="product-photo-options-dropdown">
+                    <div className="absolute left-0 right-0 mt-2 p-3 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 grid grid-cols-2 gap-2 animate-scale-up" id="product-photo-options-dropdown">
                       <button
                         type="button"
                         onClick={() => { setOrderCamActive(true); setShowPhotoOptions(false); }}
@@ -1853,11 +1966,11 @@ export default function ClientDashboard({
                         );
                       })()}
 
-                      <div className="relative">
+                       <div className="relative">
                         <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-slate-100"></div>
                         <div className="space-y-5 relative">
-                          {trackingSteps.map((step, idx) => {
-                            const curIdx = getCurrentStatusIndex(activeOrder.status);
+                          {getTrackingSteps(activeOrder).map((step, idx) => {
+                            const curIdx = getCurrentStatusIndex(activeOrder.status, activeOrder);
                             const isDone = idx < curIdx;
                             const isCurrent = idx === curIdx;
                             return (
@@ -2093,7 +2206,7 @@ export default function ClientDashboard({
 
       {/* 4) CADASTRO (REGISTRATION PAGE) */}
       {currentView === 'cadastro' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="cadastro-form-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="cadastro-form-screen">
           <div className="flex items-center gap-3 border-b pb-3 mb-6">
             <div className="bg-amber-100 text-slate-900 p-2.5 rounded-xl">
               <User className="w-6 h-6 animate-pulse" />
@@ -2272,7 +2385,7 @@ export default function ClientDashboard({
 
       {/* 5) ENTRAR (SWITCH ROLES / PROFILES SWITCHER) */}
       {currentView === 'entrar' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="entrar-profile-screen">
+        <div className="max-w-xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="entrar-profile-screen">
           <div className="border-b pb-3 mb-5">
             <h3 className="text-base font-bold text-slate-900">Selecionador de Conta de Cliente (Simulação)</h3>
             <p className="text-xs text-slate-500">Escolha um dos clientes no repositório para simular ordens, points, faturas e rotas.</p>
@@ -2319,7 +2432,7 @@ export default function ClientDashboard({
 
       {/* 6) MINHA CONTA (PROFILE MODIFICATION) */}
       {currentView === 'minha-conta' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="minha-conta-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="minha-conta-screen">
           <div className="flex items-center gap-3 border-b pb-3 mb-6">
             <User className="w-6 h-6 text-slate-805" />
             <div>
@@ -2453,7 +2566,7 @@ export default function ClientDashboard({
 
       {/* 7) HISTÓRICO DE COMPRAS (COMPLETED INVOICES) */}
       {currentView === 'historico' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="purchases-history-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="purchases-history-screen">
           <div className="border-b pb-3 mb-5">
             <h3 className="text-base font-bold text-slate-900">Histórico de Compras & Comprovativos</h3>
             <p className="text-xs text-slate-500 font-medium">Consulte suas faturas pagas e mercadorias já entregues ao seu balcão ou residência em Cabinda.</p>
@@ -2463,40 +2576,63 @@ export default function ClientDashboard({
             {clientOrders.length === 0 ? (
               <p className="text-center text-slate-400 py-8">Não há transações concluídas registadas na sua conta.</p>
             ) : (
-              clientOrders.map((ord) => {
-                const statusDetails = getStatusLabelAndColor(ord.status);
-                return (
-                  <div key={ord.id} className="p-4 border rounded-2xl bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-700">{ord.id}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(ord.createdAt).toLocaleDateString()}</span>
+              (() => {
+                const activeClient = clients.find(c => c.id === activeClientId);
+                const clientTier = activeClient?.tier || 'Standard';
+                return clientOrders.map((ord) => {
+                  const statusDetails = getStatusLabelAndColor(ord.status);
+                  return (
+                    <div key={ord.id} className="p-4 border rounded-2xl bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-700">{ord.id}</span>
+                          <span className="text-[10px] text-slate-400">{new Date(ord.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <h4 className="font-bold text-slate-900">{ord.productName}</h4>
+                        <p className="text-slate-500">Carga Qtd: {ord.quantity} • Fornecedor: {ord.supplierName}</p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOrderId(ord.id);
+                              setShowCabotageSlip(true);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                          >
+                            📄 Ver Fatura / Imprimir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadOrderInvoice(ord, clientTier)}
+                            className="px-2 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                          >
+                            📥 Descarregar Fatura
+                          </button>
+                        </div>
                       </div>
-                      <h4 className="font-bold text-slate-900">{ord.productName}</h4>
-                      <p className="text-slate-500">Carga Qtd: {ord.quantity} • Fornecedor: {ord.supplierName}</p>
-                    </div>
 
-                    <div className="text-right space-y-1">
-                      <p className="font-mono font-bold text-slate-900">{formatCurrency(ord.totalAmount)}</p>
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${statusDetails?.color}`}>
-                        {statusDetails?.label}
-                      </span>
-                      {ord.checkoutProofUrl && (
-                        <button
-                          onClick={() => showModalAlert(
-                            'Comprovativo de Compra Fiscal',
-                            `Visualização de recibo da compra comercial efetuada pelo Mediador:\n\n• Produto Adquirido: ${ord.productName}\n• Quantidade Operada: ${ord.quantity} unidades\n• Fornecedor: ${ord.supplierName}\n• Total Cobrado: ${formatCurrency(ord.totalAmount)}\n• Código da Guia AGT: BD-${ord.id.substring(4, 8).toUpperCase()}\n\nA compra física foi autenticada em Luanda no depósito principal.`,
-                            'info'
-                          )}
-                          className="text-[10px] text-sky-600 hover:underline font-bold block ml-auto mt-1 cursor-pointer"
-                        >
-                          Ver Comprovativo Fiscal
-                        </button>
-                      )}
+                      <div className="text-right space-y-1">
+                        <p className="font-mono font-bold text-slate-900">{formatCurrency(ord.totalAmount)}</p>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold ${statusDetails?.color}`}>
+                          {statusDetails?.label}
+                        </span>
+                        {ord.checkoutProofUrl && (
+                          <button
+                            onClick={() => showModalAlert(
+                              'Comprovativo de Compra Fiscal',
+                              `Visualização de recibo da compra comercial efetuada pelo Mediador:\n\n• Produto Adquirido: ${ord.productName}\n• Quantidade Operada: ${ord.quantity} unidades\n• Fornecedor: ${ord.supplierName}\n• Total Cobrado: ${formatCurrency(ord.totalAmount)}\n• Código da Guia AGT: BD-${ord.id.substring(4, 8).toUpperCase()}\n\nA compra física foi autenticada em Luanda no depósito principal.`,
+                              'info'
+                            )}
+                            className="text-[10px] text-sky-600 hover:underline font-bold block ml-auto mt-1 cursor-pointer"
+                          >
+                            Ver Comprovativo Fiscal
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                });
+              })()
             )}
           </div>
         </div>
@@ -2504,7 +2640,7 @@ export default function ClientDashboard({
 
       {/* 8) PAGAMENTOS (BUDGETS REQUIRING PAYMENTS) */}
       {currentView === 'pagamentos' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="pagamentos-screen">
+        <div className="max-w-xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="pagamentos-screen">
           <div className="border-b pb-3 mb-5">
             <h3 className="text-base font-bold text-slate-900">Pagamento de Cargas e Faturas Comerciais</h3>
             <p className="text-xs text-slate-500 font-medium font-medium">Consulte e aprove orçamentos pendentes de aprovação comercial para mercadorias em Luanda.</p>
@@ -2540,10 +2676,34 @@ export default function ClientDashboard({
                       setCurrentView('acompanhar-pedido');
                       speak("Carregando seletor de pagamento.");
                     }}
-                    className="w-full py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl"
+                    className="w-full py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl cursor-pointer"
                   >
                     Pagar Agora por MC Express ou IBAN
                   </button>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderId(ord.id);
+                        setShowCabotageSlip(true);
+                      }}
+                      className="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-center cursor-pointer text-[10px] transition-all"
+                    >
+                      📄 Ver Fatura Pro-forma
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const activeClient = clients.find(c => c.id === activeClientId);
+                        const clientTier = activeClient?.tier || 'Standard';
+                        downloadOrderInvoice(ord, clientTier);
+                      }}
+                      className="py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-800 font-extrabold rounded-lg text-center cursor-pointer text-[10px] transition-all"
+                    >
+                      📥 Descarregar Fatura
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -2553,7 +2713,7 @@ export default function ClientDashboard({
 
       {/* 9) NOTIFICAÇÕES (GENERAL HUB LIST) */}
       {currentView === 'notificacoes' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="notificacoes-screen">
+        <div className="max-w-xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="notificacoes-screen">
           <div className="flex items-center justify-between border-b pb-3 mb-5">
             <div>
               <h3 className="text-base font-bold text-slate-900">Histórico de Alertas e Aviso do Mediador</h3>
@@ -2604,7 +2764,7 @@ export default function ClientDashboard({
 
       {/* 10) MENSAGENS E SUPORTE (CHAT DIRECT IN 100% AVAILABLE SIZE) */}
       {(currentView === 'suporte' || currentView === 'mensagens') && (
-        <div className="w-full bg-slate-50 border border-slate-150 rounded-3xl p-0 shadow-lg animate-fade-in text-xs overflow-hidden" id="suporte-screen">
+        <div className="w-full bg-slate-50 border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-0 shadow-none sm:shadow-lg animate-fade-in text-xs overflow-hidden" id="suporte-screen">
           <SharedChat
             order={null}
             currentUserRole="client"
@@ -2624,7 +2784,7 @@ export default function ClientDashboard({
 
       {/* 11) RECLAMAÇÕES (SUBMIT AND CHECK COMPLAINTS) */}
       {currentView === 'reclamacoes' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="reclamacoes-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="reclamacoes-screen">
           <div className="flex items-center gap-3 border-b pb-3 mb-6">
             <AlertTriangle className="w-6 h-6 text-red-650" />
             <div>
@@ -2678,7 +2838,7 @@ export default function ClientDashboard({
 
       {/* 12) CONFIGURAÇÕES (ACCESSIBILITY DASHBOARD & CACHE RESETS) */}
       {currentView === 'configuracoes' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="configuracoes-screen">
+        <div className="max-w-xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="configuracoes-screen">
           <div className="border-b pb-3 mb-5">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
               <Settings className="w-5 h-5 text-slate-700" />
@@ -2767,7 +2927,7 @@ export default function ClientDashboard({
 
       {/* 13) SOBRE NÓS (LOGISTICS & HISTORY INFO) */}
       {currentView === 'sobre-nos' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="sobre-nos-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="sobre-nos-screen">
           <div className="flex items-center gap-3 border-b pb-3 mb-5">
             <Info className="w-6 h-6 text-slate-700" />
             <div>
@@ -2794,9 +2954,165 @@ export default function ClientDashboard({
         </div>
       )}
 
+      {/* 13.5) GUIA DE AJUDA & TAXAS (STEP-BY-STEP EXPLANATION) */}
+      {currentView === 'guia-ajuda' && (
+        <div className="max-w-3xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="guia-ajuda-screen">
+          <div className="flex items-center gap-3 border-b pb-4 mb-6">
+            <div className="bg-amber-100 text-amber-800 p-2.5 rounded-2xl">
+              <HelpCircle className="w-6 h-6 text-amber-600 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold font-display text-slate-900">Como Funciona o Mediador Cabinda?</h3>
+              <p className="text-xs text-slate-500 font-medium">Saiba como funcionam os trâmites logísticos, a nossa comissão e a taxa de despacho aduaneiro.</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* INTRO SPEECH CHIP */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 text-xs font-semibold text-slate-700 leading-relaxed flex items-start gap-3">
+              <span className="text-xl shrink-0 mt-0.5">💡</span>
+              <p>
+                Este guia interativo foi concebido para dar total transparência a você, cliente ou afiliado de Cabinda. Entenda cada etapa do processo e saiba com precisão onde o seu investimento é aplicado para garantir uma entrega 100% segura e livre de transtornos fiscais com a AGT.
+              </p>
+            </div>
+
+            {/* SECTIONS */}
+            <div className="space-y-4">
+              {/* SECTION 1: PASSO A PASSO */}
+              <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-2xs">
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <span className="bg-slate-900 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono">1</span>
+                  PASSO A PASSO DA SUA INTERMEDIAÇÃO
+                </h4>
+                
+                <div className="relative pl-4 border-l-2 border-dashed border-amber-300 ml-2.5 space-y-5">
+                  <div className="relative">
+                    <span className="absolute -left-[23px] top-0.5 w-4.5 h-4.5 bg-amber-400 text-slate-950 font-bold text-[9px] rounded-full flex items-center justify-center shadow-xs">1</span>
+                    <h5 className="text-xs font-bold text-slate-900">Registar ou Escolher o Produto</h5>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
+                      Navegue pelo nosso catálogo de produtos homologados ou use a aba <strong>"Pedir Nova Intermediação"</strong> para descrever qualquer equipamento que queira comprar das principais lojas em Luanda.
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute -left-[23px] top-0.5 w-4.5 h-4.5 bg-slate-900 text-white font-bold text-[9px] rounded-full flex items-center justify-center">2</span>
+                    <h5 className="text-xs font-bold text-slate-900">Análise e Emissão de Orçamento</h5>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
+                      O mediador em Luanda valida o preço de aquisição real no fornecedor e gera uma fatura pro-forma no sistema com as três taxas transparentes: Custo de Aquisição, Frete Marítimo/Aéreo e a Taxa de Despacho Base de 8.000 Kz.
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute -left-[23px] top-0.5 w-4.5 h-4.5 bg-slate-900 text-white font-bold text-[9px] rounded-full flex items-center justify-center">3</span>
+                    <h5 className="text-xs font-bold text-slate-900">Pagamento Seguro pelo Aplicativo</h5>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
+                      Você consulta e aprova o orçamento na aba <strong>"Minhas Faturas & Finais"</strong>. O pagamento é feito via transferência bancária oficial para o nosso IBAN seguro ou Multicaixa Express. Carrega o comprovativo diretamente para validação rápida!
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute -left-[23px] top-0.5 w-4.5 h-4.5 bg-slate-900 text-white font-bold text-[9px] rounded-full flex items-center justify-center">4</span>
+                    <h5 className="text-xs font-bold text-slate-900">Cabotagem e Trânsito Fiscal Seguro</h5>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
+                      A nossa central emite a Guia de Trânsito oficial, carrega o lote na balsa marítima de cabotagem oficial de Luanda para o porto comercial de Cabinda (ou avião TAAG para envios urgentes). Acompanha tudo em tempo real via rastreador no app!
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute -left-[23px] top-0.5 w-4.5 h-4.5 bg-emerald-500 text-white font-bold text-[9px] rounded-full flex items-center justify-center shadow-xs">✓</span>
+                    <h5 className="text-xs font-bold text-slate-900">Levantamento ou Entrega ao Domicílio</h5>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">
+                      Assim que a balsa desembarcar em Cabinda e passar no porto, você recebe um alerta para levantar no nosso balcão central de Cabinda, ou solicitar entrega imediata na sua residência ou estabelecimento em toda a província.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: PORQUE OS 8.000 KZ? */}
+              <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-2xs">
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <span className="bg-amber-100 text-amber-800 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold">AOA</span>
+                  PORQUE A TAXA DE DESPACHO BASE DE AOA 8.000 É FIXA?
+                </h4>
+                
+                <div className="space-y-3 text-xs text-slate-600 font-semibold leading-relaxed">
+                  <p>
+                    Muitos clientes perguntam por que cobramos uma <strong>Taxa de Despacho Base Fixa de 8.000 Kz</strong> em cada lote de intermediação. A razão é estritamente logística e operacional:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-2 text-slate-500 text-[11px] font-medium">
+                    <li>
+                      <strong className="text-slate-800">Custo Elevado de Operações em Luanda:</strong> Luanda é uma metrópole com distâncias imensas e trânsito caótico. A circulação para recolha de faturas físicas, carregamento no fornecedor, portagens obrigatórias e deslocação aos armazéns de estiva exige combustível e tempo de transporte que são extremamente caros.
+                    </li>
+                    <li>
+                      <strong className="text-slate-800">Manuseamento Físico e Armazenamento Temporário:</strong> O valor de 8.000 Kz cobre o processo de triagem física, embalagem para trânsito marítimo e armazenamento seguro provisório no nosso depósito em Luanda antes de embarcar.
+                    </li>
+                    <li>
+                      <strong className="text-slate-800">Despachante Portuário em Cabinda:</strong> Ao chegar ao porto comercial de Cabinda, há despesas fixas para desembarque e processamento aduaneiro no porto de Cabinda para liberação célere de mercadorias.
+                    </li>
+                  </ul>
+                  <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 text-[11px] text-amber-900">
+                    <strong>Resumo Técnico:</strong> Esta taxa de 8.000 Kz é o menor valor operacional possível para cobrir estas despesas logísticas inevitáveis por lote de carga, garantindo que a sua operação corra de forma sustentável, célere e transparente do início ao fim.
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: RATEIO TRANSPARENTE DA COMISSÃO */}
+              <div className="bg-slate-950 text-white rounded-2xl p-5 space-y-4 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+                
+                <h4 className="text-sm font-black text-amber-400 flex items-center gap-2">
+                  <span className="bg-amber-400 text-slate-950 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono">3</span>
+                  RATEIO TRANSPARENTE DA COMISSÃO (3% / 2% / 5%)
+                </h4>
+                
+                <p className="text-[11px] text-slate-300 font-semibold leading-relaxed">
+                  Para além da taxa de despacho de 8.000 Kz e do frete, cobramos o mínimo de <strong>10% de comissão de intermediação</strong> sobre o valor do produto em Luanda. Eis como esse valor de comissão é dividido para sustentar a rede:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">👥 Afiliado</span>
+                      <span className="text-xs font-mono font-bold bg-amber-400/20 text-amber-400 px-1.5 py-0.5 rounded-sm">3%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                      O parceiro local de Cabinda que indicou e trouxe o cliente para o aplicativo recebe uma percentagem garantida de <strong>3%</strong> do valor total como prémio de filiação de forma direta!
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-blue-400 uppercase tracking-wider">⚓ Despacho Extra</span>
+                      <span className="text-xs font-mono font-bold bg-blue-400/20 text-blue-400 px-1.5 py-0.5 rounded-sm">2%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                      Deduzimos <strong>2%</strong> do valor da comissão e colocamos diretamente no fundo de operações. Isto cobre imprevistos onde os 8.000 Kz de despacho fixo não são suficientes para suprir flutuações e taxas portuárias.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">🏢 Empresa Master</span>
+                      <span className="text-xs font-mono font-bold bg-emerald-400/20 text-emerald-400 px-1.5 py-0.5 rounded-sm">5%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                      A nossa agência retém <strong>5%</strong> na Conta Master. Este valor acumula de forma bruta para reinvestimento de transporte e para garantir o pagamento pontual dos salários fixos dos nossos funcionários dedicados e dos nossos dois representantes estratégicos de Luanda.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 text-[10px] text-slate-400 leading-relaxed italic border-t border-slate-800/60 font-medium">
+                  * Nota de Compromisso: No início de actividade, o salário operacional poderá variar em função das vendas, mas com a fidelização gradual e o aumento de rotas, as despesas fixas passam a ser totalmente cobertas por este rateio, garantindo previsibilidade e estabilidade contínua!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 14) TERMOS DE USO (COMPLIANCE INFRASTRUCTURE) */}
       {currentView === 'termos-uso' && (
-        <div className="max-w-2xl mx-auto bg-white border border-slate-150 rounded-3xl p-6 shadow-sm animate-fade-in" id="termos-uso-screen">
+        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="termos-uso-screen">
           <div className="border-b pb-3 mb-5">
             <h3 className="text-base font-bold text-slate-900">Termos Legais e Logísticos de Intermediação</h3>
             <p className="text-xs text-slate-500">Última atualização: Junho de 2026</p>
@@ -2815,6 +3131,317 @@ export default function ClientDashboard({
             <h4 className="font-bold text-slate-800 uppercase text-[11px]">4. Prazo Aduaneiro</h4>
             <p>Eventuais atrasos decorrentes de greves nos portos ou mau tempo na travessia marítima do rio Congo são geridos em regime de força maior, informando os clientes prontamente via Chat do Aplicativo.</p>
           </div>
+        </div>
+      )}
+
+      {/* 14.2) SOLICITAR SERVIÇOS (CLIENT SERVICE REQUEST INTERFACE) */}
+      {currentView === 'solicitar-servico' && (
+        <div className="max-w-4xl mx-auto space-y-6 animate-fade-in" id="solicitar-servico-screen">
+          {/* Header Banner */}
+          <div className="bg-slate-900 text-white rounded-3xl p-6 relative overflow-hidden shadow-md border border-slate-800">
+            <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-40 h-40 bg-amber-500/15 rounded-full blur-2xl"></div>
+            <div className="relative z-10 space-y-1">
+              <span className="text-[8px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-widest inline-block leading-none">
+                Serralharia & Metalurgia
+              </span>
+              <h2 className="text-lg font-display font-black tracking-tight leading-none text-white">
+                Solicitar Serviços Especializados
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-2xl font-medium">
+                Contrate serviços de serralharia civil, reparação metálica e estruturas sob medida de fornecedores homologados em Luanda e Cabinda. A sua encomenda e o orçamento são fiscalizados e intermediados pelo Mediador Cabinda.
+              </p>
+            </div>
+          </div>
+
+          {/* Tab buttons */}
+          <div className="flex border-b border-slate-200">
+            <button
+              onClick={() => {
+                setServiceActiveTab('catalog');
+                setSelectedServiceToRequest(null);
+                speak("A abrir catálogo de serviços disponíveis.");
+              }}
+              className={`pb-3 px-6 text-xs font-bold border-b-2 transition-all ${
+                serviceActiveTab === 'catalog'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              🛠️ Catálogo de Serviços
+            </button>
+            <button
+              onClick={() => {
+                setServiceActiveTab('my-requests');
+                setSelectedServiceToRequest(null);
+                speak("A abrir histórico de seus pedidos de serviços.");
+              }}
+              className={`pb-3 px-6 text-xs font-bold border-b-2 transition-all ${
+                serviceActiveTab === 'my-requests'
+                  ? 'border-amber-500 text-slate-900 font-black'
+                  : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              📋 Meus Serviços Solicitados ({serviceRequests.filter(r => r.clientId === activeClientId).length})
+            </button>
+          </div>
+
+          {serviceActiveTab === 'catalog' ? (
+            <div className="space-y-6">
+              {!selectedServiceToRequest ? (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {supplierServices && supplierServices.length > 0 ? (
+                      supplierServices.map((srv) => (
+                        <div
+                          key={srv.id}
+                          className="bg-white border border-slate-200 hover:border-amber-400 rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between group"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="bg-amber-100 text-amber-900 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                                  {srv.category}
+                                </span>
+                                <h3 className="font-display font-bold text-slate-900 text-sm mt-1.5 leading-snug">
+                                  {srv.name}
+                                </h3>
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                                📍 {srv.location || 'Luanda'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-normal font-semibold">
+                              {srv.description}
+                            </p>
+                            <div className="pt-2 border-t border-slate-50 flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
+                              <span>Prazo Estimado:</span>
+                              <span className="text-slate-800 font-bold">{srv.executionTime}</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <div>
+                              <span className="text-[8px] text-slate-400 font-bold uppercase block">Preço de Referência</span>
+                              <span className="font-mono text-xs font-black text-slate-900">
+                                {srv.price.toLocaleString('pt-AO')} AOA
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setSelectedServiceToRequest(srv);
+                                setServiceReqDesc('');
+                                setServiceReqLocation(client?.address || '');
+                                setServiceReqPhone(client?.phone || '');
+                                speak(`Selecionou ${srv.name}. Introduza os seus requisitos particulares.`);
+                              }}
+                              className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-xs"
+                            >
+                              Contratar Serviço
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-1 md:col-span-2 text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
+                        <span className="text-2xl block mb-2">🛠️</span>
+                        <p className="text-xs text-slate-500 font-bold uppercase">Nenhum serviço disponível no catálogo.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                    <button
+                      onClick={() => setSelectedServiceToRequest(null)}
+                      className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    >
+                      ← Voltar
+                    </button>
+                    <div>
+                      <h3 className="text-xs font-black text-amber-500 uppercase tracking-widest">A CONTRATAR SERVIÇO</h3>
+                      <h4 className="text-sm font-bold text-slate-900">{selectedServiceToRequest.name}</h4>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!serviceReqDesc.trim()) {
+                        showModalAlert('Campos Requeridos', 'Por favor, descreva os requisitos específicos do trabalho metálico.', 'warning');
+                        return;
+                      }
+
+                      const newReq: ServiceRequest = {
+                        id: `REQ-${Math.floor(1000 + Math.random() * 9000)}`,
+                        clientId: activeClientId,
+                        clientName: client?.name || 'Cliente',
+                        clientPhone: serviceReqPhone || client?.phone || '',
+                        serviceId: selectedServiceToRequest.id,
+                        serviceName: selectedServiceToRequest.name,
+                        supplierId: selectedServiceToRequest.supplierId,
+                        supplierName: selectedServiceToRequest.supplierName,
+                        category: selectedServiceToRequest.category,
+                        description: serviceReqDesc.trim(),
+                        location: serviceReqLocation.trim(),
+                        estimatedCost: selectedServiceToRequest.price,
+                        status: 'pendente',
+                        notes: '',
+                        createdAt: new Date().toISOString()
+                      };
+
+                      onCreateServiceRequest(newReq);
+                      setSelectedServiceToRequest(null);
+                      setServiceActiveTab('my-requests');
+                      speak("O seu pedido de trabalho aduaneiro ou serralharia civil foi registado. Aguarde contacto do mediador.");
+                      showModalAlert(
+                        'Solicitação Efetuada',
+                        `O seu pedido de serviço "${newReq.serviceName}" foi registado com sucesso sob o código ${newReq.id}!\n\nA equipa técnica do fornecedor "${newReq.supplierName}" juntamente com os fiscais do Mediador Cabinda irão emitir a proposta orçamental em até 12 horas úteis.`,
+                        'success'
+                      );
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">
+                        Descreva pormenorizadamente a sua necessidade (Medidas, materiais, etc.) *
+                      </label>
+                      <textarea
+                        value={serviceReqDesc}
+                        onChange={(e) => setServiceReqDesc(e.target.value)}
+                        placeholder="Ex: Preciso de fabricar uma grade pantográfica metálica para porta exterior com 2.10m x 0.90m, em ferro galvanizado pintado a esmalte cinzento..."
+                        className="w-full p-3 border rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden"
+                        rows={4}
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Morada de Execução ou Entrega *</label>
+                        <input
+                          type="text"
+                          value={serviceReqLocation}
+                          onChange={(e) => setServiceReqLocation(e.target.value)}
+                          placeholder="Ex: Cabinda Centro, Rua Direita nº 45"
+                          className="w-full p-3 border rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Telemóvel de Contacto Directo *</label>
+                        <input
+                          type="text"
+                          value={serviceReqPhone}
+                          onChange={(e) => setServiceReqPhone(e.target.value)}
+                          placeholder="Ex: +244 923..."
+                          className="w-full p-3 border rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-50 p-4 border border-amber-100 rounded-2xl space-y-1.5 text-slate-850">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-900 text-[11px]">
+                        <span>ℹ️</span> Informações Importantes:
+                      </p>
+                      <p className="text-[10px] leading-relaxed">
+                        Este serviço será prestado pela oficina homologada <strong>{selectedServiceToRequest.supplierName}</strong>. 
+                        O Mediador fiscaliza os prazos e garante que o seu adiantamento orçamental fica seguro até à aprovação e entrega final do trabalho em Cabinda.
+                      </p>
+                    </div>
+
+                    <div className="pt-3 flex gap-3">
+                      <button
+                        type="submit"
+                        className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold px-5 py-3 rounded-xl uppercase tracking-wider cursor-pointer"
+                      >
+                        Enviar Solicitação de Serviço
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedServiceToRequest(null)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-5 py-3 rounded-xl uppercase tracking-wider cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {serviceRequests.filter(r => r.clientId === activeClientId).length > 0 ? (
+                serviceRequests
+                  .filter(r => r.clientId === activeClientId)
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((req) => {
+                    const statusConfig = {
+                      pendente: { bg: 'bg-yellow-50 border-yellow-200 text-yellow-800', label: '🕒 Aguardando Proposta' },
+                      em_analise: { bg: 'bg-blue-50 border-blue-200 text-blue-800', label: '⚙️ Em Análise Técnica' },
+                      aprovado: { bg: 'bg-green-50 border-green-200 text-green-800', label: '✅ Orçamento Aprovado' },
+                      cancelado: { bg: 'bg-red-50 border-red-200 text-red-800', label: '❌ Cancelado' },
+                      concluido: { bg: 'bg-indigo-50 border-indigo-200 text-indigo-800', label: '🎉 Concluído' }
+                    }[req.status] || { bg: 'bg-slate-50 border-slate-200 text-slate-800', label: req.status };
+
+                    return (
+                      <div
+                        key={req.id}
+                        className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                          <div className="space-y-1 text-left">
+                            <span className="font-mono text-[10px] font-black text-slate-400 block">CÓDIGO: {req.id}</span>
+                            <h4 className="font-bold text-slate-900 text-xs">{req.serviceName}</h4>
+                            <p className="text-[10px] text-slate-400 font-semibold">Oficina Parceira: <strong className="text-slate-700">{req.supplierName}</strong></p>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${statusConfig.bg}`}>
+                            {statusConfig.label}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3.5 text-xs text-slate-700">
+                          <div>
+                            <span className="block font-bold text-slate-500 uppercase text-[9px] tracking-wider">A Minha Descrição técnica:</span>
+                            <p className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 mt-1 italic leading-relaxed text-slate-600 font-semibold">
+                              "{req.description}"
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-[10px] text-slate-450 font-bold">
+                            <div>
+                              <span>LOCAL DE EXECUÇÃO:</span>
+                              <p className="text-slate-800 text-[11px] font-bold mt-0.5">📍 {req.location}</p>
+                            </div>
+                            <div>
+                              <span>CUSTO ESTIMADO DO SERVIÇO:</span>
+                              <p className="text-slate-900 font-mono text-xs font-black mt-0.5">{req.estimatedCost.toLocaleString('pt-AO')} AOA</p>
+                            </div>
+                          </div>
+
+                          {req.notes && (
+                            <div className="bg-blue-50 text-blue-900 p-3.5 rounded-2xl border border-blue-100 space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest block">💬 RESPOSTA DA OFICINA & FISCAL MEDIADOR:</span>
+                              <p className="text-[10.5px] leading-relaxed font-semibold">
+                                {req.notes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              ) : (
+                <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200 p-6">
+                  <span className="text-2xl block mb-2">📋</span>
+                  <p className="text-xs text-slate-500 font-bold uppercase">Ainda não solicitou nenhum serviço técnico.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Navegue no separador "Catálogo de Serviços" para requisitar.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2924,7 +3551,8 @@ export default function ClientDashboard({
               }[sup.plan];
 
               const productsForThisSupplier = supplierProducts.filter(
-                (p) => p.supplierId === sup.id && p.published
+                (p) => p.supplierId === sup.id && p.published &&
+                  (!supplierSearchText.trim() || p.name.toLowerCase().includes(supplierSearchText.toLowerCase()))
               );
 
               return (
@@ -3041,6 +3669,24 @@ export default function ClientDashboard({
                                   <h4 className="font-bold text-xs text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-2 leading-snug">{prod.name}</h4>
                                   <p className="text-[10px] text-slate-405 line-clamp-2 leading-relaxed font-semibold">{prod.description || 'Disponível para aquisição de Cabinda por intermediação.'}</p>
                                 </div>
+
+                                {/* Location & Availability metadata */}
+                                <div className="mt-2 space-y-1 bg-slate-100/50 p-2 rounded-xl text-[9.5px] text-slate-600 font-bold border border-slate-200">
+                                  <div className="flex items-center justify-between">
+                                    <span>📍 Localização do Artigo:</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9.5px] ${
+                                      prod.location === 'Cabinda' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                    }`}>
+                                      {prod.location || 'Luanda'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>📅 Disponível para Envio:</span>
+                                    <span className="text-slate-800">
+                                      {prod.availableFromDate || 'Imediata'}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
 
                               {/* Price and Action CTA */}
@@ -3070,14 +3716,18 @@ export default function ClientDashboard({
                                     const prefilledSupplier = sup.name;
                                     const prefilledSupplierId = sup.id;
                                     const prefilledPhoto = prod.photoUrl;
-
+                                    const prefilledLocation = prod.location;
+                                    const prefilledAvailableFromDate = prod.availableFromDate;
+                                    
                                     // Switch views and store prefilled details so FazerPedido reads them!
                                     setPrefilledMarketProduct({
                                       name: prefilledName,
                                       price: prefilledPrice,
                                       supplierName: prefilledSupplier,
                                       supplierId: prefilledSupplierId,
-                                      photoUrl: prefilledPhoto
+                                      photoUrl: prefilledPhoto,
+                                      location: prefilledLocation,
+                                      availableFromDate: prefilledAvailableFromDate
                                     });
                                     
                                     setCurrentView('fazer-pedido');
@@ -3353,7 +4003,9 @@ export default function ClientDashboard({
                   </h3>
                   
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-bold text-slate-500">
-                    <span className="flex items-center gap-1">📍 Origem: Luanda</span>
+                    <span className="flex items-center gap-1">📍 Origem: {selectedProduct.location || 'Luanda'}</span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">📅 Disp.: {selectedProduct.availableFromDate || 'Imediata (Hoje)'}</span>
                     <span>•</span>
                     <span>Empresa de Stock: {sup?.name || 'Distribuidor Parceiro'}</span>
                     <span>•</span>
@@ -3412,7 +4064,8 @@ export default function ClientDashboard({
                 <button
                   type="button"
                   onClick={() => {
-                    const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo "${selectedProduct.name}" anunciado pelo parceiro de Luanda. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${selectedProduct.price.toLocaleString('pt-AO')} AOA.`;
+                    const originLoc = selectedProduct.location || 'Luanda';
+                    const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo "${selectedProduct.name}" anunciado pelo parceiro de ${originLoc}. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${selectedProduct.price.toLocaleString('pt-AO')} AOA.`;
                     
                     localStorage.setItem('mediador_prefilled_product_message', inquiryMsg);
                     localStorage.setItem('mediador_active_channel', 'general');
@@ -3437,7 +4090,7 @@ export default function ClientDashboard({
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full border border-slate-250 overflow-hidden animate-scale-up text-slate-800">
             <div className={`p-4 flex items-center gap-3 border-b ${
               customDialog.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
-              customDialog.type === 'warning' ? 'bg-amber-55 text-amber-80 * border-amber-200' :
+              customDialog.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800' :
               'bg-slate-100 text-slate-800 border-slate-200'
             }`}>
               <span className="text-lg">
@@ -3446,7 +4099,7 @@ export default function ClientDashboard({
               <h4 className="font-extrabold text-xs uppercase tracking-wider font-display">{customDialog.title}</h4>
             </div>
             
-            <div className="p-5 text-xs text-slate-605 font-semibold leading-relaxed whitespace-pre-line">
+            <div className="p-5 text-xs text-slate-600 font-semibold leading-relaxed whitespace-pre-line">
               {customDialog.message}
             </div>
 
@@ -3466,12 +4119,12 @@ export default function ClientDashboard({
       {/* CABOTAGE MANIFESTO & FICTIVE PRÓ-FORMA OFFICIAL SLIP MODAL */}
       {showCabotageSlip && activeOrder && (
         <div className="fixed inset-0 bg-slate-950/90 z-55 flex items-center justify-center p-4 overflow-y-auto" id="cabotage-invoice-modal">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl text-slate-800 leading-normal font-sans animate-scale-up relative my-8">
+          <div id="printable-invoice-wrapper" className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl text-slate-800 leading-normal font-sans animate-scale-up relative my-8">
              {/* Close Trigger */}
              <button 
                type="button" 
                onClick={() => setShowCabotageSlip(false)}
-               className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-700 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer font-bold font-sans text-xs"
+               className="hide-on-print absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-700 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer font-bold font-sans text-xs"
              >
                ✕
              </button>
@@ -3506,18 +4159,18 @@ export default function ClientDashboard({
              {/* Grid detail of Sender / Receiver */}
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-left">
                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Origem das Cargas (Luanda)</p>
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Origem das Cargas ({activeOrder.supplierLocation?.toLowerCase().includes('cabinda') ? 'Cabinda' : 'Luanda'})</p>
                  <p className="font-extrabold text-slate-800">Polo Fornecedor Geral</p>
                  <p className="text-[10px] text-slate-500"><strong>Fornecedor:</strong> {activeOrder.supplierName || 'Parceiro Local'}</p>
                  <p className="text-[10px] text-slate-500"><strong>Contacto:</strong> {activeOrder.supplierPhone || '+244 912 000 111'}</p>
-                 <p className="text-[10px] text-slate-500"><strong>Despacho:</strong> Porto de Luanda, Terminal de Cabotagem Sogester</p>
+                 <p className="text-[10px] text-slate-500"><strong>Despacho:</strong> {activeOrder.supplierLocation?.toLowerCase().includes('cabinda') ? 'Porto de Cabinda, Cais de Cabotagem' : 'Porto de Luanda, Terminal de Cabotagem Sogester'}</p>
                </div>
 
                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Destino em Cabinda</p>
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Destino em {activeOrder.supplierLocation?.toLowerCase().includes('cabinda') ? 'Luanda' : 'Cabinda'}</p>
                  <p className="font-extrabold text-slate-800">{activeOrder.clientName}</p>
                  <p className="text-[10px] text-slate-500"><strong>Telemóvel:</strong> {activeOrder.clientPhone}</p>
-                 <p className="text-[10px] text-slate-500"><strong>Entrega:</strong> {activeOrder.deliveryOption === 'domicilio' ? activeOrder.deliveryAddress : 'Polo Geral Mediador (Rua da Amizade, Cabinda Central)'}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Entrega:</strong> {activeOrder.deliveryOption === 'domicilio' ? activeOrder.deliveryAddress : (activeOrder.supplierLocation?.toLowerCase().includes('cabinda') ? 'Polo Geral Mediador (Luanda Central)' : 'Polo Geral Mediador (Rua da Amizade, Cabinda Central)')}</p>
                  <p className="text-[10px] text-slate-500"><strong>Vetor Reservado:</strong> {activeOrder.shippingCarrier || 'Carga Convencional'}</p>
                </div>
              </div>
@@ -3559,6 +4212,12 @@ export default function ClientDashboard({
                        <td className="p-2.5 text-center">-</td>
                        <td className="p-2.5 text-right font-mono">-</td>
                        <td className="p-2.5 text-right font-mono">{(activeOrder.commissionAmount || 0).toLocaleString('pt-AO')} Kz</td>
+                     </tr>
+                     <tr className="text-slate-400 text-[9px] bg-slate-50/50">
+                       <td className="p-1.5 pl-6 italic" colSpan={3}>
+                         • Rateio Interno: 3% Captador Afiliado ({Math.round((activeOrder.budgetRawPrice || 0) * 0.03).toLocaleString('pt-AO')} Kz) | 2% Reserva Despacho ({Math.round((activeOrder.budgetRawPrice || 0) * 0.02).toLocaleString('pt-AO')} Kz) | 5% Retenção Sede ({Math.round((activeOrder.budgetRawPrice || 0) * 0.05).toLocaleString('pt-AO')} Kz)
+                       </td>
+                       <td className="p-1.5 text-right font-mono text-slate-500 text-[9px] font-bold">Rateio 3/2/5</td>
                      </tr>
                      <tr className="bg-amber-400/5 font-black text-slate-950 border-t">
                        <td className="p-3" colSpan={2}>LIQUIDAÇÃO FINAL GLOBAL (AOA)</td>
@@ -3602,7 +4261,19 @@ export default function ClientDashboard({
              </div>
 
              {/* Bottom Action Bar */}
-             <div className="flex gap-2.5 justify-end border-t pt-5">
+             <div className="hide-on-print flex flex-wrap gap-2.5 justify-end border-t pt-5">
+               <button 
+                 type="button" 
+                 onClick={() => {
+                   const activeClient = clients.find(c => c.id === activeClientId);
+                   const clientTier = activeClient?.tier || 'Standard';
+                   downloadOrderInvoice(activeOrder, clientTier);
+                   showModalAlert('Fatura Descarregada', 'A fatura oficial offline foi gerada com sucesso e guardada no seu dispositivo.', 'success');
+                 }}
+                 className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-extrabold transition-all cursor-pointer font-sans"
+               >
+                 📥 Descarregar Fatura (HTML)
+               </button>
                <button 
                  type="button" 
                  onClick={() => {
@@ -3610,7 +4281,7 @@ export default function ClientDashboard({
                  }}
                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer font-sans"
                >
-                 🖨️ Descarregar PDF / Imprimir
+                 🖨️ Imprimir / Guardar PDF
                </button>
                <button 
                  type="button" 
@@ -3785,7 +4456,7 @@ export default function ClientDashboard({
                     ) : (
                       <div className="space-y-3 max-h-[250px] overflow-y-auto">
                         {referredSales.map(s => (
-                          <div key={s.id} className="p-3 bg-slate-50 border border-slate-205 rounded-xl space-y-1.5 font-sans">
+                          <div key={s.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 font-sans">
                             <div className="flex items-center justify-between text-[10px]">
                               <span className="font-mono text-slate-400 font-bold">{s.id}</span>
                               <span className={`text-[8.5px] px-1.5 py-0.5 rounded-xs font-black ${
@@ -3798,11 +4469,19 @@ export default function ClientDashboard({
                               <p className="text-[11.5px] font-black text-slate-800">Cliente: {s.clientName}</p>
                               <p className="text-[10px] text-slate-505 truncate">{s.saleDescription}</p>
                             </div>
-                            <div className="flex justify-between border-t border-slate-200/60 pt-2 text-[10px] font-mono font-bold">
+                            <div className="flex justify-between items-end border-t border-slate-200/60 pt-2 text-[10px] font-mono font-bold">
                               <div>
                                 <span className="block text-[7.5px] text-slate-400 uppercase">Seu Ganho ({s.collaboratorPercentage}%)</span>
                                 <span className="text-amber-600 font-extrabold">{formatCurrency(s.calculatedCommission)}</span>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => downloadCollaboratorSaleInvoice(s)}
+                                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-[9px] font-black uppercase tracking-wide border border-slate-200 transition-all cursor-pointer flex items-center gap-1"
+                                title="Descarregar Recibo de Comissão"
+                              >
+                                📥 Recibo
+                              </button>
                             </div>
                           </div>
                         ))}

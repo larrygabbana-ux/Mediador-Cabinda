@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage } from '../types';
+import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, SupplierService, ServiceRequest } from '../types';
 
 export const PROVINCES_OF_ANGOLA = [
   'Cabinda',
@@ -300,6 +300,8 @@ export const DEFAULT_SUPPLIER_PRODUCTS: SupplierProduct[] = [
     photoUrl: 'https://images.unsplash.com/photo-1496181130204-755241524eab?w=500&auto=format&fit=crop&q=60',
     published: true,
     sponsored: true,
+    location: 'Luanda',
+    availableFromDate: 'Imediata (Hoje)',
     createdAt: '2026-06-10T12:00:00Z'
   },
   {
@@ -313,6 +315,8 @@ export const DEFAULT_SUPPLIER_PRODUCTS: SupplierProduct[] = [
     photoUrl: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=500&auto=format&fit=crop&q=60',
     published: true,
     sponsored: true,
+    location: 'Luanda',
+    availableFromDate: 'Imediata (Hoje)',
     createdAt: '2026-06-11T14:30:00Z'
   },
   {
@@ -326,6 +330,8 @@ export const DEFAULT_SUPPLIER_PRODUCTS: SupplierProduct[] = [
     photoUrl: 'https://images.unsplash.com/photo-1620712447308-cfbcb829c3c6?w=500&auto=format&fit=crop&q=60',
     published: true,
     sponsored: true,
+    location: 'Luanda',
+    availableFromDate: 'A partir de amanhã',
     createdAt: '2026-06-12T09:00:00Z'
   },
   {
@@ -339,6 +345,8 @@ export const DEFAULT_SUPPLIER_PRODUCTS: SupplierProduct[] = [
     photoUrl: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=500&auto=format&fit=crop&q=60',
     published: true,
     sponsored: false,
+    location: 'Cabinda',
+    availableFromDate: 'Imediata (Hoje)',
     createdAt: '2026-06-13T10:00:00Z'
   },
   {
@@ -352,6 +360,8 @@ export const DEFAULT_SUPPLIER_PRODUCTS: SupplierProduct[] = [
     photoUrl: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=500&auto=format&fit=crop&q=60',
     published: true,
     sponsored: false,
+    location: 'Cabinda',
+    availableFromDate: 'Disponível em 5 dias úteis (sob encomenda)',
     createdAt: '2026-06-14T11:00:00Z'
   }
 ];
@@ -375,6 +385,79 @@ export const DEFAULT_SUPPLIER_MESSAGES: SupplierMessage[] = [
   }
 ];
 
+export const DEFAULT_SUPPLIER_SERVICES: SupplierService[] = [
+  {
+    id: 'srv-1',
+    supplierId: 'supp-3',
+    supplierName: 'Grupo Robert Hudson Angola',
+    name: 'Despacho Aduaneiro Expresso (Porto de Luanda)',
+    price: 150000,
+    category: 'Despacho Aduaneiro',
+    description: 'Serviço completo de levantamento, desembaraço aduaneiro e preparação de documentação legal para trânsito de mercadoria Luanda-Cabinda.',
+    photoUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=500&auto=format&fit=crop&q=60',
+    location: 'Luanda',
+    published: true,
+    createdAt: '2026-06-14T09:00:00Z'
+  },
+  {
+    id: 'srv-2',
+    supplierId: 'supp-4',
+    supplierName: 'EletroCabinda Fornecimentos',
+    name: 'Montagem e Eletrificação de Armazéns Comerciais',
+    price: 450000,
+    category: 'Transporte de Carga',
+    description: 'Serviço profissional de cabeamento estruturado, montagem de quadros elétricos certificados e luminárias para instalações industriais e armazéns em Cabinda.',
+    photoUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=500&auto=format&fit=crop&q=60',
+    location: 'Cabinda',
+    published: true,
+    createdAt: '2026-06-15T11:00:00Z'
+  },
+  {
+    id: 'srv-3',
+    supplierId: 'supp-1',
+    supplierName: 'Mundo Digital Angola Lda',
+    name: 'Paletização Segura e Embalamento a Vácuo',
+    price: 35000,
+    category: 'Embalamento e Paletização',
+    description: 'Embalamento de alta proteção para materiais eletrónicos, servidores, computadores e equipamentos sensíveis antes do envio aéreo ou marítimo.',
+    photoUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=500&auto=format&fit=crop&q=60',
+    location: 'Luanda',
+    published: true,
+    createdAt: '2026-06-16T14:30:00Z'
+  },
+  {
+    id: 'srv-4',
+    supplierId: 'supp-3',
+    supplierName: 'Grupo Robert Hudson Angola',
+    name: 'Inspeção e Certificação de Geradores a Diesel',
+    price: 85000,
+    category: 'Inspeção de Mercadoria',
+    description: 'Análise técnica de motores de geradores, com emissão de relatório completo de conformidade antes de ser embarcado na balsa para Cabinda.',
+    photoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=60',
+    location: 'Ambos',
+    published: true,
+    createdAt: '2026-06-17T10:00:00Z'
+  }
+];
+
+export const DEFAULT_SERVICE_REQUESTS: ServiceRequest[] = [
+  {
+    id: 'SREQ-7001',
+    clientId: 'cli-1',
+    clientName: 'Bartolomeu Nolasco',
+    clientPhone: '+244 923 456 789',
+    serviceId: 'srv-1',
+    serviceName: 'Despacho Aduaneiro Expresso (Porto de Luanda)',
+    supplierId: 'supp-3',
+    supplierName: 'Grupo Robert Hudson Angola',
+    category: 'Despacho Aduaneiro',
+    notes: 'Solicito assistência urgente no Porto de Luanda para desembaraço de um gerador de 500kVA importado por nós.',
+    status: 'em_analise',
+    estimatedCost: 150000,
+    createdAt: '2026-07-15T10:00:00Z'
+  }
+];
+
 const STORAGE_KEYS = {
   CLIENTS: 'mediador_cabinda_clients',
   ORDERS: 'mediador_cabinda_orders',
@@ -382,6 +465,8 @@ const STORAGE_KEYS = {
   CURRENT_CLIENT_ID: 'mediador_cabinda_curr_client_id',
   SUPPLIERS: 'mediador_cabinda_suppliers',
   SUPPLIER_PRODUCTS: 'mediador_cabinda_supplier_products',
+  SUPPLIER_SERVICES: 'mediador_cabinda_supplier_services',
+  SERVICE_REQUESTS: 'mediador_cabinda_service_requests',
   SUPPLIER_MESSAGES: 'mediador_cabinda_supplier_messages'
 };
 
@@ -406,6 +491,12 @@ export function initializeStorage() {
   if (!localStorage.getItem(STORAGE_KEYS.SUPPLIER_PRODUCTS)) {
     localStorage.setItem(STORAGE_KEYS.SUPPLIER_PRODUCTS, JSON.stringify(DEFAULT_SUPPLIER_PRODUCTS));
   }
+  if (!localStorage.getItem(STORAGE_KEYS.SUPPLIER_SERVICES)) {
+    localStorage.setItem(STORAGE_KEYS.SUPPLIER_SERVICES, JSON.stringify(DEFAULT_SUPPLIER_SERVICES));
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.SERVICE_REQUESTS)) {
+    localStorage.setItem(STORAGE_KEYS.SERVICE_REQUESTS, JSON.stringify(DEFAULT_SERVICE_REQUESTS));
+  }
   if (!localStorage.getItem(STORAGE_KEYS.SUPPLIER_MESSAGES)) {
     localStorage.setItem(STORAGE_KEYS.SUPPLIER_MESSAGES, JSON.stringify(DEFAULT_SUPPLIER_MESSAGES));
   }
@@ -414,31 +505,96 @@ export function initializeStorage() {
 export function getClients(): Client[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS);
-  return raw ? JSON.parse(raw) : DEFAULT_CLIENTS;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_CLIENTS;
+  } catch (e) {
+    console.error("Error parsing clients from local storage, resetting:", e);
+    return DEFAULT_CLIENTS;
+  }
+}
+
+export function safeLocalStorageSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e: any) {
+    console.error(`Error saving to localStorage for key ${key}:`, e);
+    // If it's a QuotaExceededError, try to clean up base64 images to prevent crashing
+    if (e.name === 'QuotaExceededError' || e.code === 22 || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 1014) {
+      if (key === STORAGE_KEYS.SUPPLIER_PRODUCTS) {
+        try {
+          const products: SupplierProduct[] = JSON.parse(value);
+          const cleanedProducts = products.map(p => {
+            if (p.photoUrl && p.photoUrl.startsWith('data:image/')) {
+              return { ...p, photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60' };
+            }
+            return p;
+          });
+          localStorage.setItem(key, JSON.stringify(cleanedProducts));
+          console.warn("Storage quota exceeded! Replaced large base64 photos in products with a lightweight default.");
+          return;
+        } catch (innerErr) {
+          console.error("Failed to recover from quota exceeded in supplier products:", innerErr);
+        }
+      }
+      
+      if (key === STORAGE_KEYS.ORDERS) {
+        try {
+          const orders = JSON.parse(value);
+          const cleanedOrders = orders.map((o: any) => {
+            if (o.photos && Array.isArray(o.photos)) {
+              const cleanedPhotos = o.photos.map((p: any) => {
+                if (p.url && p.url.startsWith('data:image/')) {
+                  return { ...p, url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60' };
+                }
+                return p;
+              });
+              return { ...o, photos: cleanedPhotos };
+            }
+            return o;
+          });
+          localStorage.setItem(key, JSON.stringify(cleanedOrders));
+          console.warn("Storage quota exceeded! Replaced large base64 photos in orders with a lightweight default.");
+          return;
+        } catch (innerErr) {
+          console.error("Failed to recover from quota exceeded in orders:", innerErr);
+        }
+      }
+    }
+  }
 }
 
 export function saveClients(clients: Client[]) {
-  localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+  safeLocalStorageSetItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
 }
 
 export function getOrders(): Order[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.ORDERS);
-  return raw ? JSON.parse(raw) : DEFAULT_ORDERS;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_ORDERS;
+  } catch (e) {
+    console.error("Error parsing orders from local storage, resetting:", e);
+    return DEFAULT_ORDERS;
+  }
 }
 
 export function saveOrders(orders: Order[]) {
-  localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+  safeLocalStorageSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
 }
 
 export function getMessages(): Message[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-  return raw ? JSON.parse(raw) : DEFAULT_MESSAGES;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_MESSAGES;
+  } catch (e) {
+    console.error("Error parsing messages from local storage, resetting:", e);
+    return DEFAULT_MESSAGES;
+  }
 }
 
 export function saveMessages(messages: Message[]) {
-  localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+  safeLocalStorageSetItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
 }
 
 export function getCurrentClientId(): string {
@@ -447,36 +603,82 @@ export function getCurrentClientId(): string {
 }
 
 export function saveCurrentClientId(clientId: string) {
-  localStorage.setItem(STORAGE_KEYS.CURRENT_CLIENT_ID, clientId);
+  safeLocalStorageSetItem(STORAGE_KEYS.CURRENT_CLIENT_ID, clientId);
 }
 
 export function getSuppliers(): Supplier[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.SUPPLIERS);
-  return raw ? JSON.parse(raw) : DEFAULT_SUPPLIERS;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_SUPPLIERS;
+  } catch (e) {
+    console.error("Error parsing suppliers from local storage, resetting:", e);
+    return DEFAULT_SUPPLIERS;
+  }
 }
 
 export function saveSuppliers(suppliers: Supplier[]) {
-  localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
+  safeLocalStorageSetItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
 }
 
 export function getSupplierProducts(): SupplierProduct[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.SUPPLIER_PRODUCTS);
-  return raw ? JSON.parse(raw) : DEFAULT_SUPPLIER_PRODUCTS;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_SUPPLIER_PRODUCTS;
+  } catch (e) {
+    console.error("Error parsing supplier products from local storage, resetting:", e);
+    return DEFAULT_SUPPLIER_PRODUCTS;
+  }
 }
 
 export function saveSupplierProducts(products: SupplierProduct[]) {
-  localStorage.setItem(STORAGE_KEYS.SUPPLIER_PRODUCTS, JSON.stringify(products));
+  safeLocalStorageSetItem(STORAGE_KEYS.SUPPLIER_PRODUCTS, JSON.stringify(products));
 }
 
 export function getSupplierMessages(): SupplierMessage[] {
   initializeStorage();
   const raw = localStorage.getItem(STORAGE_KEYS.SUPPLIER_MESSAGES);
-  return raw ? JSON.parse(raw) : DEFAULT_SUPPLIER_MESSAGES;
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_SUPPLIER_MESSAGES;
+  } catch (e) {
+    console.error("Error parsing supplier messages from local storage, resetting:", e);
+    return DEFAULT_SUPPLIER_MESSAGES;
+  }
 }
 
 export function saveSupplierMessages(messages: SupplierMessage[]) {
-  localStorage.setItem(STORAGE_KEYS.SUPPLIER_MESSAGES, JSON.stringify(messages));
+  safeLocalStorageSetItem(STORAGE_KEYS.SUPPLIER_MESSAGES, JSON.stringify(messages));
 }
+
+export function getSupplierServices(): SupplierService[] {
+  initializeStorage();
+  const raw = localStorage.getItem(STORAGE_KEYS.SUPPLIER_SERVICES);
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_SUPPLIER_SERVICES;
+  } catch (e) {
+    console.error("Error parsing supplier services from local storage, resetting:", e);
+    return DEFAULT_SUPPLIER_SERVICES;
+  }
+}
+
+export function saveSupplierServices(services: SupplierService[]) {
+  safeLocalStorageSetItem(STORAGE_KEYS.SUPPLIER_SERVICES, JSON.stringify(services));
+}
+
+export function getServiceRequests(): ServiceRequest[] {
+  initializeStorage();
+  const raw = localStorage.getItem(STORAGE_KEYS.SERVICE_REQUESTS);
+  try {
+    return raw ? JSON.parse(raw) : DEFAULT_SERVICE_REQUESTS;
+  } catch (e) {
+    console.error("Error parsing service requests from local storage, resetting:", e);
+    return DEFAULT_SERVICE_REQUESTS;
+  }
+}
+
+export function saveServiceRequests(requests: ServiceRequest[]) {
+  safeLocalStorageSetItem(STORAGE_KEYS.SERVICE_REQUESTS, JSON.stringify(requests));
+}
+
 

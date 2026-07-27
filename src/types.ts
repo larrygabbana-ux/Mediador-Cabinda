@@ -129,6 +129,8 @@ export interface SupplierProduct {
   photoUrl: string;
   published: boolean; // Approved/published by mediator
   sponsored: boolean; // Highlighted
+  location?: 'Luanda' | 'Cabinda'; // Physical warehouse location
+  availableFromDate?: string; // Estimated date/info on when supplier makes it available
   createdAt: string;
 }
 
@@ -169,4 +171,38 @@ export interface CollaboratorSale {
   status: 'pendente' | 'pago';
   createdAt: string;
 }
+
+export interface SupplierService {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  name: string;
+  price: number; // base / estimated price in AOA
+  category: 'Despacho Aduaneiro' | 'Transporte de Carga' | 'Compra Assistida' | 'Embalamento e Paletização' | 'Inspeção de Mercadoria' | 'Outros';
+  description: string;
+  photoUrl?: string;
+  location?: 'Luanda' | 'Cabinda' | 'Ambos';
+  executionTime?: string;
+  published: boolean;
+  createdAt: string;
+}
+
+export interface ServiceRequest {
+  id: string;
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  serviceId: string;
+  serviceName: string;
+  supplierId: string;
+  supplierName: string;
+  category: string;
+  description?: string;
+  location?: string;
+  notes?: string;
+  status: 'pendente' | 'em_analise' | 'aprovado' | 'cancelado' | 'concluido';
+  estimatedCost?: number;
+  createdAt: string;
+}
+
 

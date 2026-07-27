@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale } from './types';
+import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from './types';
 import { 
   getClients, 
   getOrders, 
@@ -22,10 +22,17 @@ import {
   getSupplierProducts,
   saveSupplierProducts,
   getSupplierMessages,
-  saveSupplierMessages
+  saveSupplierMessages,
+  safeLocalStorageSetItem,
+  getSupplierServices,
+  saveSupplierServices,
+  getServiceRequests,
+  saveServiceRequests
 } from './data/mockData';
 import ClientDashboard from './components/ClientDashboard';
 import AdminDashboard from './components/AdminDashboard';
+// @ts-ignore
+import appLogoImg from './assets/images/mediador_cabinda_logo_1783098275536.jpg';
 import { 
   Building, 
   ShieldCheck, 
@@ -57,6 +64,31 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const [appLoading, setAppLoading] = useState<boolean>(true);
+  const [loadingProgress, setLoadingProgress] = useState<number>(0);
+  const [loadingStatus, setLoadingStatus] = useState<string>('Inicializando o sistema...');
+
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const savedAuth = localStorage.getItem('mediador_cabinda_is_authorized');
+      return savedAuth === 'true';
+    }
+    return false;
+  });
+  const [accessCode, setAccessCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('mediador_cabinda_saved_access_code') || '';
+    }
+    return '';
+  });
+  const [rememberCode, setRememberCode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('mediador_cabinda_remember_code') === 'true';
+    }
+    return false;
+  });
+  const [authError, setAuthError] = useState<string>('');
+
   const [role, setRole] = useState<'client' | 'admin'>('client');
   const [clients, setClients] = useState<Client[]>([]);
   const [activeClientId, setActiveClientId] = useState<string>('cli-1');
@@ -70,6 +102,8 @@ export default function App() {
   // Suppliers state
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
+  const [supplierServices, setSupplierServices] = useState<SupplierService[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [supplierMessages, setSupplierMessages] = useState<SupplierMessage[]>([]);
 
   // Collaborators & sales state (synchronised across panels)
@@ -77,7 +111,7 @@ export default function App() {
   const [collaboratorSales, setCollaboratorSales] = useState<CollaboratorSale[]>([]);
 
   // Modular routing active views for client
-  const [currentView, setCurrentView] = useState<'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria'>('inicio');
+  const [currentView, setCurrentView] = useState<'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria' | 'guia-ajuda' | 'solicitar-servico'>('inicio');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [supportExpanded, setSupportExpanded] = useState(false);
 
@@ -98,6 +132,110 @@ export default function App() {
   // Search state for Home View
   const [homeSearchQuery, setHomeSearchQuery] = useState('');
 
+  const authenticateCode = (code: string) => {
+    const cleaned = code.trim().toLowerCase();
+    if (!cleaned) return null;
+
+    if (cleaned === 'admin99' || cleaned === 'gestao' || cleaned === 'gestão' || cleaned === 'admin') {
+      setRole('admin');
+      return { role: 'admin', type: 'system' };
+    }
+
+    const clientsList = getClients();
+    const matchedClient = clientsList.find(
+      c => c.id.toLowerCase() === cleaned || c.email.toLowerCase() === cleaned
+    );
+    if (matchedClient) {
+      setRole('client');
+      setActiveClientId(matchedClient.id);
+      saveCurrentClientId(matchedClient.id);
+      return { role: 'client', type: 'client', id: matchedClient.id };
+    }
+
+    // Check collaborators
+    const storedColabs = localStorage.getItem('mediador_cabinda_collaborators');
+    let colabsList: Collaborator[] = [];
+    try {
+      colabsList = storedColabs ? JSON.parse(storedColabs) : [];
+    } catch (err) {
+      console.error("Error parsing collaborators:", err);
+    }
+    const matchedColab = colabsList.find(
+      c => c.id.toLowerCase() === cleaned || c.email.toLowerCase() === cleaned
+    );
+    if (matchedColab) {
+      setRole('admin');
+      return { role: 'admin', type: 'collaborator', id: matchedColab.id };
+    }
+
+    return null;
+  };
+
+  const handleLogin = () => {
+    const cleaned = accessCode.trim().toLowerCase();
+    if (!cleaned) {
+      setAuthError('Por favor, introduza um código ou e-mail de acesso.');
+      speakText('Por favor, introduza um código ou e-mail de acesso.');
+      return;
+    }
+
+    const matched = authenticateCode(cleaned);
+    if (matched) {
+      setIsAuthorized(true);
+      setAuthError('');
+      if (rememberCode) {
+        safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
+        safeLocalStorageSetItem('mediador_cabinda_saved_access_code', cleaned);
+        safeLocalStorageSetItem('mediador_cabinda_remember_code', 'true');
+      } else {
+        localStorage.removeItem('mediador_cabinda_is_authorized');
+        localStorage.removeItem('mediador_cabinda_saved_access_code');
+        localStorage.removeItem('mediador_cabinda_remember_code');
+      }
+      speakText('Acesso autorizado com sucesso. Bem-vindo de volta.');
+    } else {
+      setAuthError('Credencial inválida. Introduza um e-mail ou código de teste válido.');
+      speakText('Credencial inválida. Introduza um e-mail ou código de teste.');
+    }
+  };
+
+  // Simulate app loading screen
+  useEffect(() => {
+    const statuses = [
+      'Iniciando sistema de intermediação...',
+      'Sincronizando rotas de Cabinda para Luanda...',
+      'Carregando despachantes alfandegários oficiais...',
+      'Analisando tarifas aduaneiras e fiscais (AGT)...',
+      'Configurando canais seguros de WhatsApp...',
+      'Carregando catálogo de fornecedores...',
+      'Pronto para operações!'
+    ];
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setAppLoading(false);
+          }, 450);
+          return 100;
+        }
+        const nextProgress = prev + Math.floor(Math.random() * 15) + 6;
+        const stepIndex = Math.min(Math.floor((nextProgress / 100) * statuses.length), statuses.length - 1);
+        setLoadingStatus(statuses[stepIndex]);
+        return Math.min(nextProgress, 100);
+      });
+    }, 150);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Perform post-auth initialization or update
+  useEffect(() => {
+    if (isAuthorized && accessCode) {
+      authenticateCode(accessCode);
+    }
+  }, [isAuthorized, accessCode]);
+
   // Initialize and load storage
   useEffect(() => {
     initializeStorage();
@@ -107,12 +245,18 @@ export default function App() {
     setMessages(getMessages());
     setSuppliers(getSuppliers());
     setSupplierProducts(getSupplierProducts());
+    setSupplierServices(getSupplierServices());
+    setServiceRequests(getServiceRequests());
     setSupplierMessages(getSupplierMessages());
 
     // Initialize mock notifications
     const storedNotifs = localStorage.getItem('mediador_cabinda_notifications');
     if (storedNotifs) {
-      setNotifications(JSON.parse(storedNotifs));
+      try {
+        setNotifications(JSON.parse(storedNotifs));
+      } catch (e) {
+        console.error("Error parsing notifications:", e);
+      }
     } else {
       const initialNotifs: Notification[] = [
         {
@@ -135,22 +279,30 @@ export default function App() {
         }
       ];
       setNotifications(initialNotifs);
-      localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(initialNotifs));
+      safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(initialNotifs));
     }
 
     // Initialize list of carrier companies (empresas de despacho)
     const storedCarriers = localStorage.getItem('mediador_cabinda_carriers');
     if (storedCarriers) {
-      setCarriersList(JSON.parse(storedCarriers));
+      try {
+        setCarriersList(JSON.parse(storedCarriers));
+      } catch (e) {
+        console.error("Error parsing carriers:", e);
+      }
     } else {
       setCarriersList(CARRIER_COMPANIES);
-      localStorage.setItem('mediador_cabinda_carriers', JSON.stringify(CARRIER_COMPANIES));
+      safeLocalStorageSetItem('mediador_cabinda_carriers', JSON.stringify(CARRIER_COMPANIES));
     }
 
     // Initialize collaborators
     const storedColabs = localStorage.getItem('mediador_cabinda_collaborators');
     if (storedColabs) {
-      setCollaborators(JSON.parse(storedColabs));
+      try {
+        setCollaborators(JSON.parse(storedColabs));
+      } catch (e) {
+        console.error("Error parsing collaborators:", e);
+      }
     } else {
       const initialColabs: Collaborator[] = [
         {
@@ -188,13 +340,17 @@ export default function App() {
         }
       ];
       setCollaborators(initialColabs);
-      localStorage.setItem('mediador_cabinda_collaborators', JSON.stringify(initialColabs));
+      safeLocalStorageSetItem('mediador_cabinda_collaborators', JSON.stringify(initialColabs));
     }
 
     // Initialize collaborator sales
     const storedColabSales = localStorage.getItem('mediador_cabinda_collaborator_sales');
     if (storedColabSales) {
-      setCollaboratorSales(JSON.parse(storedColabSales));
+      try {
+        setCollaboratorSales(JSON.parse(storedColabSales));
+      } catch (e) {
+        console.error("Error parsing collaborator sales:", e);
+      }
     } else {
       const initialSales: CollaboratorSale[] = [
         {
@@ -251,7 +407,7 @@ export default function App() {
         }
       ];
       setCollaboratorSales(initialSales);
-      localStorage.setItem('mediador_cabinda_collaborator_sales', JSON.stringify(initialSales));
+      safeLocalStorageSetItem('mediador_cabinda_collaborator_sales', JSON.stringify(initialSales));
     }
   }, []);
 
@@ -278,18 +434,18 @@ export default function App() {
 
   const handleUpdateCollaborators = (newColabs: Collaborator[]) => {
     setCollaborators(newColabs);
-    localStorage.setItem('mediador_cabinda_collaborators', JSON.stringify(newColabs));
+    safeLocalStorageSetItem('mediador_cabinda_collaborators', JSON.stringify(newColabs));
   };
 
   const handleUpdateCollaboratorSales = (newSales: CollaboratorSale[]) => {
     setCollaboratorSales(newSales);
-    localStorage.setItem('mediador_cabinda_collaborator_sales', JSON.stringify(newSales));
+    safeLocalStorageSetItem('mediador_cabinda_collaborator_sales', JSON.stringify(newSales));
   };
 
   const handleAddCarrier = (newCarrier: CarrierCompany) => {
     const updated = [...carriersList, newCarrier];
     setCarriersList(updated);
-    localStorage.setItem('mediador_cabinda_carriers', JSON.stringify(updated));
+    safeLocalStorageSetItem('mediador_cabinda_carriers', JSON.stringify(updated));
     speakText(`Nova empresa de despacho cadastrada: ${newCarrier.name}`);
   };
 
@@ -310,7 +466,7 @@ export default function App() {
     };
     const updatedNotifs = [addedNotif, ...notifications];
     setNotifications(updatedNotifs);
-    localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
+    safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
     speakText("Seu pedido foi recebido com sucesso no sistema. Aguarde a cotação comercial.");
   };
 
@@ -393,7 +549,7 @@ export default function App() {
 
       setNotifications((prev) => {
         const next = [adminNotif, ...prev];
-        localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(next));
+        safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(next));
         return next;
       });
 
@@ -421,7 +577,7 @@ export default function App() {
 
       setNotifications((prev) => {
         const next = [clientNotif, ...prev];
-        localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(next));
+        safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(next));
         return next;
       });
 
@@ -450,13 +606,13 @@ export default function App() {
   const handleAddNotification = (newNotif: Notification) => {
     const updatedNotifs = [newNotif, ...notifications];
     setNotifications(updatedNotifs);
-    localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
+    safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
   };
 
   const handleMarkNotificationRead = (id: string) => {
     const updatedNotifs = notifications.map(n => n.id === id ? { ...n, read: true } : n);
     setNotifications(updatedNotifs);
-    localStorage.setItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
+    safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
   };
 
   const handleUpdateSupplier = (updated: Supplier) => {
@@ -487,6 +643,30 @@ export default function App() {
     const next = [...supplierMessages, msg];
     setSupplierMessages(next);
     saveSupplierMessages(next);
+  };
+
+  const handleUpdateSupplierService = (updated: SupplierService) => {
+    const next = supplierServices.map(s => s.id === updated.id ? updated : s);
+    setSupplierServices(next);
+    saveSupplierServices(next);
+  };
+
+  const handleCreateSupplierService = (newS: SupplierService) => {
+    const next = [newS, ...supplierServices];
+    setSupplierServices(next);
+    saveSupplierServices(next);
+  };
+
+  const handleUpdateServiceRequest = (updated: ServiceRequest) => {
+    const next = serviceRequests.map(r => r.id === updated.id ? updated : r);
+    setServiceRequests(next);
+    saveServiceRequests(next);
+  };
+
+  const handleCreateServiceRequest = (newR: ServiceRequest) => {
+    const next = [newR, ...serviceRequests];
+    setServiceRequests(next);
+    saveServiceRequests(next);
   };
 
   const handleResetSimulator = () => {
@@ -569,11 +749,58 @@ export default function App() {
     }
   };
 
-  if (clients.length === 0) {
+  if (appLoading || clients.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 font-sans">
-        <div className="text-center p-8 bg-white border border-slate-200 rounded-xl shadow-md">
-          <p className="text-sm font-semibold text-slate-700">Carregando Mediador Cabinda...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white font-sans p-4 select-none relative overflow-hidden" id="app-splash-loader-screen">
+        {/* Ambient background glows */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="max-w-md w-full text-center space-y-8 relative z-10 animate-fade-in">
+          {/* Main Logo Container */}
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="relative w-36 h-36 flex items-center justify-center bg-white p-2 rounded-[32px] shadow-2xl border border-white/25 overflow-hidden">
+              <img 
+                src={appLogoImg} 
+                alt="Logo Mediador Cabinda" 
+                className="w-full h-full object-contain rounded-2xl"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            
+            <div className="space-y-1.5 mt-2">
+              <h1 className="text-2xl font-black tracking-tight text-white font-display">
+                Mediador Cabinda
+              </h1>
+              <p className="text-xs font-bold tracking-[0.25em] text-amber-400 uppercase">
+                Unindo Angola
+              </p>
+            </div>
+          </div>
+
+          {/* Loading status progress container */}
+          <div className="space-y-3 bg-slate-950/40 p-5 rounded-3xl border border-white/5 shadow-inner">
+            <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">
+              <span className="truncate max-w-[260px] text-amber-300">{loadingStatus}</span>
+              <span className="font-mono text-white text-xs">{loadingProgress}%</span>
+            </div>
+
+            {/* Progress track */}
+            <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-white/5">
+              <div 
+                className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 rounded-full transition-all duration-150 shadow-xs"
+                style={{ width: `${loadingProgress}%` }}
+              />
+            </div>
+
+            <div className="text-[9px] text-slate-500 font-medium">
+              Controle Aduaneiro e Intermediação Logística Luanda • Cabinda
+            </div>
+          </div>
+
+          <div className="text-[10px] text-slate-600 font-bold">
+            © 2026 Mediador Cabinda S.A. Todos os direitos reservados.
+          </div>
         </div>
       </div>
     );
@@ -610,7 +837,7 @@ export default function App() {
           
           {/* Logo and title combined on a single line */}
           <div className="flex items-center gap-3 shrink-0">
-            {role === 'client' && (
+            {role === 'client' && isAuthorized && (
               <button 
                 onClick={() => {
                   setSidebarOpen(!sidebarOpen);
@@ -633,7 +860,7 @@ export default function App() {
 
           {/* RIGHT ACTION CONTROLS: CONSOLIDATED NOTIFICATIONS + RETURN TO CLIENT FOR ADMIN */}
           <div className="flex items-center gap-2 shrink-0">
-            {role === 'client' && (
+            {role === 'client' && isAuthorized && (
               <div className="sm:relative">
                 {/* Integrated Profile Avatar holding Notification Badge */}
                 <button
@@ -709,18 +936,34 @@ export default function App() {
             )}
 
             {/* If Admin view, show simple exit button */}
-            {role === 'admin' && (
-              <button
-                onClick={() => {
-                  setRole('client');
-                  speakText("Vista do cliente ativada.");
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 font-black text-[11px] rounded-xl transition-all cursor-pointer shadow-sm border border-amber-500"
-                title="Voltar para a vista do cliente"
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Sair da Gestão</span>
-              </button>
+            {role === 'admin' && isAuthorized && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setRole('client');
+                    speakText("Vista do cliente ativada.");
+                  }}
+                  className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-bold text-[10px] rounded-xl transition-all cursor-pointer border border-white/10"
+                  title="Mudar para a vista do cliente"
+                >
+                  <User className="w-3 h-3" />
+                  <span>Ver Cliente</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAuthorized(false);
+                    localStorage.removeItem('mediador_cabinda_is_authorized');
+                    localStorage.removeItem('mediador_cabinda_saved_access_code');
+                    localStorage.removeItem('mediador_cabinda_remember_code');
+                    speakText("Terminou sessão da gestão.");
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-650/15 hover:bg-red-650/25 active:scale-95 text-red-400 font-bold text-[10px] rounded-xl transition-all cursor-pointer border border-red-500/15"
+                  title="Terminar Sessão Completa"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Sair</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -1000,6 +1243,22 @@ export default function App() {
                   <Settings className="w-4.5 h-4.5 shrink-0" />
                   <span>Preferências</span>
                 </button>
+
+                {/* Sair da Conta (Logout) */}
+                <button
+                  onClick={() => {
+                    setIsAuthorized(false);
+                    localStorage.removeItem('mediador_cabinda_is_authorized');
+                    localStorage.removeItem('mediador_cabinda_saved_access_code');
+                    localStorage.removeItem('mediador_cabinda_remember_code');
+                    setSidebarOpen(false);
+                    speakText("Terminou sessão no aplicativo.");
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-left text-xs font-bold transition-all text-red-650 hover:bg-red-50 cursor-pointer"
+                >
+                  <X className="w-4.5 h-4.5 shrink-0" />
+                  <span>Terminar Sessão (Sair)</span>
+                </button>
               </div>
 
               {/* COLLAPSIBLE SUPPORT SECTION */}
@@ -1050,11 +1309,36 @@ export default function App() {
                     </button>
 
                     {/* Official Contactos info inside the Support toggle (Requirement 2) */}
-                    <div className="mt-3 pt-3 border-t border-slate-100 pl-2 text-[10px] text-slate-500 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <div className="mt-3 pt-3 border-t border-slate-100 pl-2 text-[10px] text-slate-500 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <p className="font-extrabold uppercase tracking-wider text-slate-700 text-[9px]">📍 Contactos Oficiais</p>
                       <p><strong>Cabinda:</strong> Porto Comercial, Pavilhão C-4</p>
                       <p><strong>Luanda:</strong> Maculusso, Rua da Missão nº 12</p>
-                      <p><strong>📞 Linha Fone:</strong> +244 945 000 111</p>
+                      <div className="pt-1 border-t border-slate-200/60 mt-1 space-y-1">
+                        <p className="flex items-center gap-1">
+                          <strong>📞 Ligações:</strong>{' '}
+                          <a href="tel:+244942043293" className="text-sky-600 hover:underline font-bold">
+                            +244 942 043 293
+                          </a>
+                        </p>
+                        <p className="flex items-center gap-1">
+                          <strong>🟢 WhatsApp:</strong>{' '}
+                          <a 
+                            href="https://wa.me/244942043293" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-emerald-600 hover:underline font-extrabold flex items-center gap-0.5 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 cursor-pointer"
+                            title="Abrir no WhatsApp Business"
+                          >
+                            942 043 293 🚀
+                          </a>
+                        </p>
+                        <p className="flex items-center gap-1">
+                          <strong>✉️ E-mail:</strong>{' '}
+                          <a href="mailto:hilariogime0@gmail.com" className="text-sky-600 hover:underline font-bold truncate max-w-[150px]" title="Enviar e-mail">
+                            hilariogime0@gmail.com
+                          </a>
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1281,14 +1565,14 @@ export default function App() {
       )}
 
       {/* CORE FRAME FOR RESPONSIVE PREVIEW CHANGER */}
-      <div className="flex-1 w-full bg-slate-100 flex items-center justify-center p-3 sm:p-5">
+      <div className="flex-1 w-full bg-slate-100 flex items-center justify-center p-0 sm:p-4">
         
         <div className={`w-full transition-all duration-350 bg-slate-100 flex flex-col h-full
           ${simulatedDevice === 'smartphone' 
-            ? 'max-w-[390px] h-[844px] overflow-y-auto border-[10px] border-slate-900 rounded-[44px] shadow-2xl relative bg-white my-4 scrollbar-thin' 
+            ? 'max-w-[390px] h-[844px] overflow-hidden border-[10px] border-slate-900 rounded-[44px] shadow-2xl relative bg-white my-4 scrollbar-thin' 
             : simulatedDevice === 'tablet'
-              ? 'max-w-[768px] h-[1024px] overflow-y-auto border-[8px] border-slate-800 rounded-[32px] shadow-2xl relative bg-white my-4 scrollbar-thin'
-              : 'max-w-7xl mx-auto h-auto'
+              ? 'max-w-[768px] h-[1024px] overflow-hidden border-[8px] border-slate-800 rounded-[32px] shadow-2xl relative bg-white my-4 scrollbar-thin'
+              : 'w-full max-w-7xl mx-auto h-auto'
           }`}
           id="simulated-device-container"
         >
@@ -1308,9 +1592,158 @@ export default function App() {
           )}
 
           {/* MAIN PAGE CONTAINER */}
-          <main className={`flex-1 p-3 sm:p-5 lg:p-7 ${simulatedDevice !== 'desktop' ? 'h-full overflow-y-auto pb-10' : ''}`}>
+          <main className={`flex-1 p-0 sm:p-4 md:p-6 lg:p-8 ${simulatedDevice !== 'desktop' ? 'h-full overflow-y-auto pb-24' : ''}`}>
             
-            {role === 'client' ? (
+            {!isAuthorized ? (
+              <div className="max-w-md mx-auto my-4 sm:my-8 animate-fade-in" id="portal-acesso-container">
+                <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden text-left p-6 sm:p-8 space-y-6">
+                  <div className="text-center space-y-4">
+                    {/* APP LOGO DESIGN WITH SLOGAN */}
+                    <div className="flex flex-col items-center justify-center space-y-3" id="app-branded-logo">
+                      <div className="relative w-24 h-24 flex items-center justify-center bg-slate-50 rounded-[24px] border border-slate-150 shadow-md overflow-hidden group">
+                        <img 
+                          src={appLogoImg} 
+                          alt="Logo Oficial Mediador Cabinda" 
+                          className="w-full h-full object-contain p-1"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      
+                      {/* Brand display with explicit slogan requested */}
+                      <div className="space-y-1 text-center">
+                        <h2 className="text-xl font-extrabold text-slate-900 tracking-tight font-display">
+                          Mediador Cabinda
+                        </h2>
+                        <div className="flex flex-col items-center">
+                          <p className="text-[10px] font-black tracking-widest text-amber-500 uppercase flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping"></span>
+                            Unindo Angola
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-3">
+                      <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                        Controle Aduaneiro e Logístico de Cargas Luanda &harr; Cabinda
+                      </p>
+                    </div>
+                  </div>
+
+                  {authError && (
+                    <div className="p-3 bg-red-50 border border-red-100 text-red-650 rounded-xl text-xs flex items-center gap-2 font-semibold">
+                      <span>⚠️</span> {authError}
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Código de Acesso ou E-mail
+                      </label>
+                      <input
+                        type="text"
+                        value={accessCode}
+                        onChange={(e) => {
+                          setAccessCode(e.target.value);
+                          setAuthError('');
+                        }}
+                        placeholder="Ex: bartolomeu.nolasco@gmail.com, admin99"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-hidden focus:ring-1 focus:ring-amber-500 text-slate-800"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleLogin();
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={rememberCode}
+                          onChange={(e) => setRememberCode(e.target.checked)}
+                          className="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-semibold text-slate-600">Lembrar neste dispositivo</span>
+                      </label>
+                    </div>
+
+                    <button
+                      onClick={handleLogin}
+                      className="w-full p-3 bg-slate-950 hover:bg-slate-900 active:scale-98 text-white font-extrabold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 border border-slate-800 uppercase tracking-wide"
+                    >
+                      <span>Entrar no Sistema</span>
+                      <span>➔</span>
+                    </button>
+                  </div>
+
+                  {/* Quick selection credentials block */}
+                  <div className="pt-4 border-t border-slate-100 space-y-3">
+                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider">
+                      💡 Credenciais de Teste / Homologação do APK:
+                    </p>
+
+                    <div className="space-y-2">
+                      {/* Client accounts */}
+                      <div>
+                        <p className="text-[8px] uppercase font-bold text-slate-400">Contas de Clientes (Área de Compras):</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <button
+                            onClick={() => {
+                              setAccessCode('bartolomeu.nolasco@gmail.com');
+                              setAuthError('');
+                              speakText("Selecionado cliente Bartolomeu Nolasco");
+                            }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Bartolomeu (cli-1)
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAccessCode('avelina.chimpa@outlook.ao');
+                              setAuthError('');
+                              speakText("Selecionada cliente Avelina Chimpa");
+                            }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Avelina (cli-2)
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAccessCode('manuel.buco@outlook.com');
+                              setAuthError('');
+                              speakText("Selecionado cliente Manuel Buco");
+                            }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Manuel Buco (cli-3)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Admin accounts */}
+                      <div>
+                        <p className="text-[8px] uppercase font-bold text-slate-400">Conta Administrativa / Gestão:</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <button
+                            onClick={() => {
+                              setAccessCode('admin99');
+                              setAuthError('');
+                              speakText("Selecionado acesso administrador");
+                            }}
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            admin99 (Gestão Completa)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : role === 'client' ? (
               <ClientDashboard
                 clients={clients}
                 activeClientId={activeClientId}
@@ -1346,6 +1779,12 @@ export default function App() {
                 onUpdateCollaborators={handleUpdateCollaborators}
                 collaboratorSales={collaboratorSales}
                 onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
+                supplierServices={supplierServices}
+                onUpdateSupplierService={handleUpdateSupplierService}
+                onCreateSupplierService={handleCreateSupplierService}
+                serviceRequests={serviceRequests}
+                onCreateServiceRequest={handleCreateServiceRequest}
+                onUpdateServiceRequest={handleUpdateServiceRequest}
               />
             ) : (
               <AdminDashboard
@@ -1371,6 +1810,14 @@ export default function App() {
                 onUpdateCollaborators={handleUpdateCollaborators}
                 collaboratorSales={collaboratorSales}
                 onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
+                supplierServices={supplierServices}
+                onUpdateSupplierService={handleUpdateSupplierService}
+                onCreateSupplierService={handleCreateSupplierService}
+                serviceRequests={serviceRequests}
+                onCreateServiceRequest={handleCreateServiceRequest}
+                onUpdateServiceRequest={handleUpdateServiceRequest}
+                onChangeRole={setRole}
+                onChangeView={setCurrentView}
               />
             )}
           </main>
@@ -1490,7 +1937,7 @@ export default function App() {
                 onClick={() => {
                   setShowNotificationModal(false);
                   setSelectedNotificationForModal(null);
-                  localStorage.setItem('mediador_active_channel', 'general');
+                  safeLocalStorageSetItem('mediador_active_channel', 'general');
                   setCurrentView('mensagens');
                   speakText("Chat de Atendimento Directo Aberto. Pode escrever a sua resposta ao Diretor Geral.");
                 }}

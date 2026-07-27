@@ -52,6 +52,7 @@ interface SharedChatProps {
   clients?: Client[];
   orders?: Order[];
   onMarkChannelAsRead?: (channelId: string) => void;
+  showModalAlert?: (title: string, message: string, type?: 'success' | 'info' | 'warning') => void;
 }
 
 type ChatStatusType = 'online' | 'absent' | 'serving' | 'out_of_hours';
@@ -118,12 +119,24 @@ export default function SharedChat({
   clientId,
   clients,
   orders,
-  onMarkChannelAsRead
+  onMarkChannelAsRead,
+  showModalAlert
 }: SharedChatProps) {
   const [inputText, setInputText] = useState('');
   const [showAttachmentsMenu, setShowAttachmentsMenu] = useState(false);
   const [chatStatus, setChatStatus] = useState<ChatStatusType>('online');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Fallback local alert modal state for iframe sandbox compatibility
+  const [localToast, setLocalToast] = useState<{ title: string; message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+
+  const triggerAlert = (title: string, msgText: string, type: 'success' | 'info' | 'warning' = 'info') => {
+    if (showModalAlert) {
+      showModalAlert(title, msgText, type);
+    } else {
+      setLocalToast({ title, message: msgText, type });
+    }
+  };
 
   // Track selected chat channel ID (WhatsApp style list switching)
   const [activeChannelId, setActiveChannelId] = useState<string>('');
@@ -345,7 +358,11 @@ export default function SharedChat({
     const { sanitized, blocked, triggers } = sanitizeCommunicationText(text);
     
     if (blocked) {
-      alert(`⚠️ Regulamento de Segurança Interna: Detetámos dados confidenciais (${triggers.join(', ')}) na sua mensagem. \n\nPor razões de conformidade e garantia da intermediação, os canais de contacto direto da empresa foram ocultados. Use a nossa plataforma de faturação de Cabinda para a transação 100% segura.`);
+      triggerAlert(
+        "Regulamento de Segurança Interna ⚠️",
+        `Detetámos dados confidenciais (${triggers.join(', ')}) na sua mensagem.\n\nPor razões de conformidade e garantia da intermediação, os canais de contacto direto da empresa foram ocultados. Use a nossa plataforma de faturação de Cabinda para a transação 100% segura.`,
+        "warning"
+      );
     }
 
     const destChanId = (currentUserRole === 'client' && activeChannelId === 'general' && clientId)
@@ -534,7 +551,7 @@ export default function SharedChat({
         role: 'Equipa de Operações e Despachos',
         avatar: '👑',
         status: 'online',
-        phone: '+244 923 001 002'
+        phone: '+244 942 043 293'
       });
 
       // 2. Partner presets
@@ -651,10 +668,10 @@ export default function SharedChat({
   };
 
   return (
-    <div className={`flex bg-slate-100 dark:bg-slate-950 border border-slate-200 rounded-3xl overflow-hidden shadow-xl w-full min-w-0 max-w-full relative ${
+    <div className={`flex bg-slate-100 dark:bg-slate-950 border-0 sm:border border-slate-200 rounded-none sm:rounded-3xl overflow-hidden shadow-none sm:shadow-xl w-full min-w-0 max-w-full relative ${
       order 
         ? 'h-[50vh] min-h-[350px] max-h-[500px]' 
-        : 'h-[70vh] md:h-[75vh] min-h-[400px] md:min-h-[580px] max-h-[680px]'
+        : 'h-[78vh] md:h-[75vh] min-h-[450px] md:min-h-[580px] max-h-[720px]'
     }`} id={`chat-hub-container-full`}>
       
       {/* ==================== PANEL 1: CONVERSATION LIST (Always visible on desktop, visible on mobile if no activeChannelId) ==================== */}
@@ -795,11 +812,28 @@ export default function SharedChat({
                   </div>
                   
                   {/* Role and status indicator bar */}
-                  <p className="text-[10px] text-slate-550 font-semibold tracking-wide flex items-center gap-1.5 mt-1">
+                  <div className="text-[10px] text-slate-550 font-semibold tracking-wide flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1">
                     <span>{activeContact.role}</span>
                     <span className="opacity-40">•</span>
                     <span className="text-[9px] text-green-600 font-bold uppercase">{getStatusDetails(chatStatus)?.label}</span>
-                  </p>
+                    {activeContact.phone && activeContact.phone !== 'Em Trânsito' && activeContact.phone !== 'Logística Portuária' && activeContact.phone !== 'N/A' && (
+                      <>
+                        <span className="opacity-40">•</span>
+                        <a 
+                          href={activeContact.phone.includes('942') && activeContact.phone.includes('043')
+                            ? 'https://wa.me/244942043293' 
+                            : `https://wa.me/${activeContact.phone.replace(/[^0-9]/g, '')}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-600 hover:text-emerald-700 font-black flex items-center gap-0.5 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 cursor-pointer hover:underline"
+                          title="Contactar diretamente no WhatsApp"
+                        >
+                          🟢 WhatsApp: {activeContact.phone}
+                        </a>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -941,7 +975,7 @@ export default function SharedChat({
                                       <span className="text-[8px] opacity-75 font-mono uppercase block mt-1">Ficheiro Documento PDF</span>
                                     </div>
                                   </div>
-                                  <button className="p-1.5 bg-black/5 hover:bg-black/10 rounded-lg text-slate-700 shrink-0" onClick={() => alert('Parabéns! O ficheiro associado de Cabinda foi baixado com absoluto sucesso!')}>
+                                  <button className="p-1.5 bg-black/5 hover:bg-black/10 rounded-lg text-slate-700 shrink-0" onClick={() => triggerAlert('Ficheiro Baixado 📥', 'O ficheiro associado de Cabinda foi baixado com absoluto sucesso!', 'success')}>
                                     <Download className="w-4 h-4" />
                                   </button>
                                 </div>
@@ -964,14 +998,14 @@ export default function SharedChat({
                                   </div>
                                   <div className="grid grid-cols-2 gap-1.5 pt-1">
                                     <button 
-                                      className="py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-[9px] uppercase tracking-wide cursor-pointer flex items-center justify-center gap-1"
-                                      onClick={() => alert('A simular impressão imediata da faturização...')}
+                                      className="py-1 bg-amber-400 hover:bg-amber-550 text-slate-950 font-bold rounded-lg text-[9px] uppercase tracking-wide cursor-pointer flex items-center justify-center gap-1"
+                                      onClick={() => triggerAlert('Impressão Iniciada 🖨️', 'A simular impressão imediata da faturização do despacho...', 'info')}
                                     >
                                       <Printer className="w-3 h-3" /> Imprimir
                                     </button>
                                     <button 
                                       className="py-1 bg-white/10 hover:bg-white/15 text-white font-bold rounded-lg text-[9px] uppercase tracking-wide cursor-pointer flex items-center justify-center gap-1"
-                                      onClick={() => alert('Fatura autorizada e exportada para PDF.')}
+                                      onClick={() => triggerAlert('Exportação PDF 📄', 'Fatura autorizada e exportada para PDF com sucesso.', 'success')}
                                     >
                                       <Download className="w-3 h-3" /> PDF
                                     </button>
@@ -993,7 +1027,7 @@ export default function SharedChat({
                                   </div>
                                   <button 
                                     className="w-full py-1 bg-white/10 hover:bg-white/15 text-emerald-300 font-bold rounded-lg text-[9px] uppercase tracking-wider"
-                                    onClick={() => alert('Ficheiro de recibo local descarregado.')}
+                                    onClick={() => triggerAlert('Recibo Descarregado 💳', 'Ficheiro de recibo local descarregado com sucesso.', 'success')}
                                   >
                                     Ver Comprovativo
                                   </button>
@@ -1015,7 +1049,7 @@ export default function SharedChat({
                                   </div>
                                   <button 
                                     className="w-full py-1 bg-sky-400 text-slate-950 font-bold rounded-lg text-[10px]"
-                                    onClick={() => alert('A simular download da guia militar/marítima Oficial do Porto de Luanda.')}
+                                    onClick={() => triggerAlert('Guia de Cabotagem 🚢', 'A simular download da guia militar/marítima Oficial do Porto de Luanda.', 'info')}
                                   >
                                     Descarregar Guia de Transporte
                                   </button>
@@ -1029,7 +1063,7 @@ export default function SharedChat({
                                   <h5 className="text-xs font-bold leading-tight">Certidão Geral de Desembaraço Comercial - AGT</h5>
                                   <button 
                                     className="w-full py-1.5 bg-white/10 hover:bg-white/15 text-purple-300 rounded-lg text-[10px] font-bold mt-1"
-                                    onClick={() => alert('Certidão de desembaraço de alfândegas aduaneiras baixada.')}
+                                    onClick={() => triggerAlert('Certidão AGT 💜', 'Certidão de desembaraço de alfândegas aduaneiras baixada com sucesso.', 'success')}
                                   >
                                     Visualizar Certidão AGT
                                   </button>
@@ -1342,6 +1376,33 @@ export default function SharedChat({
                   <FileText className="w-5 h-5" />
                 </div>
                 <span className="text-xs text-slate-700 font-bold">Documento</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fallback Local Toast dialog */}
+      {localToast && (
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-fade-in text-slate-850">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up text-center">
+            <div className={`p-4 border-b border-slate-100 flex items-center justify-center gap-2 ${
+              localToast.type === 'success' ? 'bg-emerald-50 text-emerald-800 font-bold' :
+              localToast.type === 'warning' ? 'bg-amber-50 text-amber-850 font-bold' :
+              'bg-slate-50 text-slate-800'
+            }`}>
+              <span className="text-xs font-black uppercase tracking-wider">{localToast.title}</span>
+            </div>
+            <div className="p-5 text-[11px] text-slate-600 font-semibold leading-relaxed whitespace-pre-line text-left">
+              {localToast.message}
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setLocalToast(null)}
+                className="px-5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                Compreendi
               </button>
             </div>
           </div>
