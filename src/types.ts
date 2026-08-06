@@ -32,6 +32,8 @@ export interface Order {
   clientId: string;
   clientName: string;
   clientPhone: string;
+  productId?: string; // Associated supplier product ID
+  productCode?: string; // Product SKU / Identity code e.g. PRD-1001
   productName: string;
   quantity: number;
   supplierName: string;
@@ -112,6 +114,9 @@ export interface Supplier {
   plan: 'gratuito' | 'prata' | 'ouro' | 'diamante';
   logoUrl?: string;
   description?: string;
+  nif?: string;
+  contactPerson?: string;
+  whatsapp?: string;
   phoneHidden: string; // Protected (only Mediator accesses, hidden from client)
   emailHidden: string;   // Protected
   addressHidden: string; // Protected
@@ -120,6 +125,7 @@ export interface Supplier {
 
 export interface SupplierProduct {
   id: string;
+  productCode?: string; // Product SKU / Identity code e.g. PRD-1001
   supplierId: string;
   name: string;
   price: number; // in AOA

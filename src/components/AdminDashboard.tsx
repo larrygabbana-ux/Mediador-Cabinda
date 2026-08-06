@@ -211,8 +211,26 @@ export default function AdminDashboard({
 
   // Suppliers CRM Management States
   const [adminSelectedSupplierId, setAdminSelectedSupplierId] = useState<string | null>(suppliers[0]?.id || null);
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState<boolean>(false);
+  const [adminNewSupplierForm, setAdminNewSupplierForm] = useState({
+    name: '',
+    city: 'Luanda',
+    category: 'Eletrónicos e Tecnologia',
+    nif: '',
+    contactPerson: '',
+    phoneHidden: '',
+    whatsapp: '',
+    emailHidden: '',
+    addressHidden: '',
+    plan: 'ouro' as 'gratuito' | 'prata' | 'ouro' | 'diamante',
+    description: '',
+    logoUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=100&auto=format&fit=crop&q=60'
+  });
+
   const [adminNewProductForm, setAdminNewProductForm] = useState({
     name: '',
+    productCode: '',
+    supplierId: suppliers[0]?.id || '',
     price: 35000,
     availability: 'imediata' as 'imediata' | 'sob-pedido' | 'esgotado',
     stock: 12,
@@ -272,6 +290,22 @@ export default function AdminDashboard({
   ];
   const [selectedSupplierChatId, setSelectedSupplierChatId] = useState<string | null>(suppliers[0]?.id || null);
   const [adminSupplierChatInput, setAdminSupplierChatInput] = useState('');
+
+  // Product Search by Code (SKU) / Name across all suppliers & SKU image preview
+  const [adminProductCodeSearch, setAdminProductCodeSearch] = useState('');
+  const [adminInspectedProduct, setAdminInspectedProduct] = useState<SupplierProduct | null>(null);
+  const [adminImagePreviewUrl, setAdminImagePreviewUrl] = useState<{ url: string; title: string } | null>(null);
+
+  // Product Code Helper
+  const getProductCode = (prod: SupplierProduct) => {
+    if (prod.productCode) return prod.productCode;
+    if (prod.id && prod.id.startsWith('sprod-')) {
+      const num = parseInt(prod.id.replace('sprod-', ''), 10);
+      return `PRD-${1000 + (isNaN(num) ? 1 : num)}`;
+    }
+    if (prod.id && prod.id.startsWith('PRD-')) return prod.id;
+    return `PRD-${(prod.id || '1001').slice(-4).toUpperCase()}`;
+  };
 
   // Clients Tab state selectors (Requirement 1 & 2 & 3)
   const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
@@ -781,6 +815,419 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
         </div>
       </div>
 
+      {/* 🔍 LOCALIZADOR GLOBAL DE ARTIGO POR CÓDIGO (PRD-XXXX) & EMPRESA VENDEDORA */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-amber-400/40 rounded-3xl p-4 sm:p-5 text-white shadow-xl space-y-4" id="admin-global-product-finder">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-lg font-black shadow-md shrink-0">
+              🔍
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-black tracking-wide text-white uppercase flex items-center gap-1.5">
+                  Localizador de Produto por Código & Empresa Vendedora
+                </h3>
+                <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                  PRD-XXXX
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+                Digite ou selecione o código do artigo para visualizar a fotografia ampliada e obter todos os dados de contacto da empresa (Telefone, WhatsApp, E-mail, NIF e Armazém) para solicitar o produto.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {adminProductCodeSearch && (
+              <button
+                type="button"
+                onClick={() => setAdminProductCodeSearch('')}
+                className="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1"
+              >
+                ✕ Limpar Pesquisa
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Input Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="🔎 Insira o código do produto (ex: PRD-1001, PRD-1002, PRD-1003) ou nome do artigo / empresa..."
+            value={adminProductCodeSearch}
+            onChange={(e) => setAdminProductCodeSearch(e.target.value)}
+            className="w-full bg-slate-850 text-white placeholder:text-slate-400 border-2 border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-3 text-xs sm:text-sm font-semibold focus:outline-none transition-all shadow-inner"
+          />
+        </div>
+
+        {/* Quick Clickable Product Code Chips */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+            <span>⚡ Códigos Rápidos Cadastrados no Sistema:</span>
+            <span className="text-amber-400">{supplierProducts.length} artigos catalogados</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+            {supplierProducts.map((p) => {
+              const code = getProductCode(p);
+              const isSelected = adminProductCodeSearch.toUpperCase() === code.toUpperCase();
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    setAdminProductCodeSearch(code);
+                    setAdminInspectedProduct(p);
+                  }}
+                  className={`text-[10.5px] px-2.5 py-1 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-400 text-slate-950 font-black ring-2 ring-amber-300 shadow-md scale-102'
+                      : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700'
+                  }`}
+                  title={`${code}: ${p.name}`}
+                >
+                  <span className="font-mono text-amber-300 font-black">{code}</span>
+                  <span className="truncate max-w-[130px] font-medium text-slate-300">{p.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Real-time Match Results & Full Intermediation Sheet */}
+        {adminProductCodeSearch.trim().length > 0 && (() => {
+          const q = adminProductCodeSearch.toLowerCase().trim();
+          const matched = supplierProducts.filter(p => {
+            const pCode = getProductCode(p).toLowerCase();
+            const pName = p.name.toLowerCase();
+            const pDesc = (p.description || '').toLowerCase();
+            const pLoc = (p.location || '').toLowerCase();
+            const sup = suppliers.find(s => s.id === p.supplierId);
+            const sName = (sup?.name || '').toLowerCase();
+            return pCode.includes(q) || pName.includes(q) || pDesc.includes(q) || pLoc.includes(q) || sName.includes(q);
+          });
+
+          if (matched.length === 0) {
+            return (
+              <div className="bg-slate-850/80 border border-slate-800 rounded-2xl p-6 text-center text-slate-400 space-y-2 animate-fade-in">
+                <p className="text-sm font-bold text-slate-300">
+                  Nenhum produto encontrado com o código ou termo "{adminProductCodeSearch}"
+                </p>
+                <p className="text-xs text-slate-500">
+                  Verifique se o código está correto (ex: PRD-1001, PRD-1002) ou cadastre o artigo na aba <strong>"Parceiros"</strong>.
+                </p>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-4 pt-1 animate-fade-in">
+              <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
+                <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                  <span>📦</span> {matched.length} {matched.length === 1 ? 'Artigo Encontrado' : 'Artigos Encontrados'} para "{adminProductCodeSearch}"
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Clique na foto para ampliar ou use os botões rápidos para contactar o vendedor
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {matched.map((prod) => {
+                  const code = getProductCode(prod);
+                  const sup = suppliers.find(s => s.id === prod.supplierId);
+                  const linkedOrders = orders.filter(o => 
+                    (o.productCode && o.productCode.toUpperCase() === code.toUpperCase()) ||
+                    o.productName.toLowerCase().includes(prod.name.toLowerCase()) ||
+                    (o.notes && o.notes.includes(code))
+                  );
+
+                  const sellerPhone = sup?.phoneHidden || sup?.whatsapp || '+244 923 000 000';
+                  const cleanPhone = sellerPhone.replace(/\D/g, '');
+                  const whatsappMsg = `Olá ${sup?.name || 'Parceiro'}! Somos da Direção de Intermediação do Mediador Cabinda Lda. Temos um cliente em Cabinda interessado no artigo [CÓDIGO: ${code}] (${prod.name}). Solicitamos confirmação de stock imediato e envio de dados para faturação e levantamento da mercadoria. Obrigado!`;
+
+                  return (
+                    <div key={prod.id} className="bg-slate-850 border-2 border-slate-700/80 hover:border-amber-400/70 rounded-2xl p-4 sm:p-5 text-slate-200 space-y-4 shadow-lg transition-all">
+                      
+                      {/* Top Row: Image + Product Core Info + Action Buttons */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                        
+                        {/* High-res Image Preview */}
+                        <div className="md:col-span-3 flex flex-col items-center">
+                          <div 
+                            onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                            className="relative group cursor-pointer w-full aspect-square max-w-[180px] rounded-2xl overflow-hidden bg-slate-900 border-2 border-slate-700 hover:border-amber-400 transition-all shadow-md"
+                            title="Clique para ver a foto do artigo em ecrã inteiro"
+                          >
+                            <img 
+                              src={prod.photoUrl} 
+                              alt={prod.name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                              referrerPolicy="no-referrer" 
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-xs text-white font-bold gap-1">
+                              <span className="text-base">🔍</span>
+                              <span>Ver Foto em Alta Resolução</span>
+                            </div>
+                            <div className="absolute top-2 left-2 bg-slate-950/80 text-amber-400 text-[9px] font-black px-2 py-0.5 rounded-md font-mono border border-white/10">
+                              {code}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                            className="mt-2 text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            🔍 Ver Foto Ampliada
+                          </button>
+                        </div>
+
+                        {/* Product Technical Details */}
+                        <div className="md:col-span-9 space-y-3">
+                          
+                          {/* Title & Badges */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-750 pb-2.5">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs font-black text-slate-950 bg-amber-400 px-2.5 py-0.5 rounded-lg shadow-xs">
+                                  🏷️ {code}
+                                </span>
+                                <span className={`text-[9.5px] px-2 py-0.5 rounded-md font-extrabold uppercase ${
+                                  prod.availability === 'imediata' ? 'bg-emerald-900/80 text-emerald-300 border border-emerald-700' :
+                                  prod.availability === 'sob-pedido' ? 'bg-amber-900/80 text-amber-300 border border-amber-700' :
+                                  'bg-red-900/80 text-red-300 border border-red-700'
+                                }`}>
+                                  {prod.availability === 'imediata' ? '✓ Stock Imediato' : prod.availability === 'sob-pedido' ? '⏳ Sob Pedido' : '✕ Esgotado'}
+                                </span>
+                                <span className="text-[10px] text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700">
+                                  Stock: {prod.stock} unidades
+                                </span>
+                                <span className="text-[10px] text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700">
+                                  📍 Armazém: {prod.location || 'Luanda'}
+                                </span>
+                              </div>
+                              <h4 className="text-base font-black text-white">{prod.name}</h4>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Preço de Compra Fornecedor</span>
+                              <span className="text-lg font-mono font-black text-amber-300">
+                                {prod.price.toLocaleString('pt-AO')} AOA
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Description */}
+                          {prod.description && (
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                              {prod.description}
+                            </p>
+                          )}
+
+                          {/* SELLER / SUPPLIER COMPLETE IDENTITY CARD (What user explicitly asked for) */}
+                          <div className="bg-slate-900 border-2 border-amber-400/30 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                              <p className="text-[11px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🏢</span> DADOS COMPLETOS DA EMPRESA QUE ESTÁ A VENDER
+                              </p>
+                              {sup && (
+                                <span className={`text-[8.5px] px-2 py-0.5 rounded-md uppercase font-black tracking-wide ${
+                                  sup.plan === 'diamante' ? 'bg-amber-500 text-white' :
+                                  sup.plan === 'ouro' ? 'bg-amber-400 text-slate-950' :
+                                  sup.plan === 'prata' ? 'bg-slate-400 text-white' :
+                                  'bg-slate-800 text-slate-400'
+                                }`}>
+                                  Plano {sup.plan}
+                                </span>
+                              )}
+                            </div>
+
+                            {sup ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                                {/* Nome da Empresa */}
+                                <div className="space-y-0.5">
+                                  <span className="text-[9.5px] font-bold text-slate-400 uppercase">Nome da Empresa:</span>
+                                  <p className="font-extrabold text-white text-sm">{sup.name}</p>
+                                  <p className="text-[10px] text-slate-400">{sup.category} • {sup.city}</p>
+                                </div>
+
+                                {/* NIF */}
+                                <div className="space-y-0.5">
+                                  <span className="text-[9.5px] font-bold text-slate-400 uppercase">NIF / Registo Comercial:</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="font-mono font-bold text-amber-300 text-xs">{sup.nif || '5401928374'}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(sup.nif || '5401928374');
+                                        showModalAlert('NIF Copiado! 📋', `O NIF ${sup.nif || '5401928374'} da empresa ${sup.name} foi copiado com sucesso.`, 'info');
+                                      }}
+                                      className="text-[9px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 cursor-pointer"
+                                      title="Copiar NIF"
+                                    >
+                                      Copiar
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400">Responsável: {sup.contactPerson || 'Gestor Comercial'}</p>
+                                </div>
+
+                                {/* Telefone & WhatsApp */}
+                                <div className="space-y-0.5">
+                                  <span className="text-[9.5px] font-bold text-slate-400 uppercase">Telefone / WhatsApp Comercial:</span>
+                                  <p className="font-mono font-bold text-emerald-400 text-xs">{sellerPhone}</p>
+                                  <p className="text-[9.5px] text-slate-500">🔒 Confidencial Gestão</p>
+                                </div>
+
+                                {/* Email */}
+                                <div className="space-y-0.5 sm:col-span-2 lg:col-span-1">
+                                  <span className="text-[9.5px] font-bold text-slate-400 uppercase">E-mail Comercial:</span>
+                                  <p className="font-mono text-slate-200 text-[11px] truncate">{sup.emailHidden || 'contacto@empresa.ao'}</p>
+                                  <a
+                                    href={`mailto:${sup.emailHidden || 'contacto@empresa.ao'}?subject=${encodeURIComponent(`Intermediação de Compra - Artigo ${code} (${prod.name})`)}`}
+                                    className="text-[9.5px] text-sky-400 hover:underline inline-block mt-0.5"
+                                  >
+                                    ✉️ Enviar E-mail ao Fornecedor
+                                  </a>
+                                </div>
+
+                                {/* Endereço Físico do Armazém */}
+                                <div className="space-y-0.5 sm:col-span-2">
+                                  <span className="text-[9.5px] font-bold text-slate-400 uppercase">Endereço do Armazém / Loja:</span>
+                                  <p className="text-slate-200 text-xs font-semibold flex items-start gap-1">
+                                    <span>📍</span>
+                                    <span>{sup.addressHidden || 'Armazém Central, Luanda, Angola'}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">
+                                Fornecedor não especificado para este produto.
+                              </p>
+                            )}
+
+                            {/* FAST INTERMEDIATION ACTION BUTTONS */}
+                            <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center justify-between gap-2.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Direct WhatsApp Button */}
+                                <a
+                                  href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md active:scale-97 cursor-pointer"
+                                  title="Abrir conversa no WhatsApp com o vendedor com mensagem de encomenda pré-formatada"
+                                >
+                                  <span>💬</span>
+                                  <span>Solicitar Vendedor no WhatsApp</span>
+                                </a>
+
+                                {/* Direct Phone Call */}
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                                >
+                                  <span>📞</span>
+                                  <span>Ligar ({sellerPhone})</span>
+                                </a>
+
+                                {/* Copy Full Sheet */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const fullText = `FICHA DE INTERMEDIAÇÃO • MEDIADOR CABINDA LDA.\n` +
+                                      `-------------------------------------------\n` +
+                                      `CÓDIGO ARTIGO: ${code}\n` +
+                                      `PRODUTO: ${prod.name}\n` +
+                                      `PREÇO BASE: ${prod.price.toLocaleString('pt-AO')} AOA\n` +
+                                      `STOCK: ${prod.stock} un. (${prod.availability})\n` +
+                                      `ARMAZÉM: ${prod.location || 'Luanda'}\n\n` +
+                                      `EMPRESA VENDEDORA:\n` +
+                                      `Nome: ${sup?.name || 'N/A'}\n` +
+                                      `NIF: ${sup?.nif || 'N/A'}\n` +
+                                      `Responsável: ${sup?.contactPerson || 'N/A'}\n` +
+                                      `Telefone / WhatsApp: ${sellerPhone}\n` +
+                                      `E-mail: ${sup?.emailHidden || 'N/A'}\n` +
+                                      `Endereço: ${sup?.addressHidden || 'N/A'}`;
+                                    navigator.clipboard?.writeText(fullText);
+                                    showModalAlert('Ficha Completa Copiada! 📋', 'Todos os dados do artigo e da empresa vendedora foram copiados para a sua área de transferência.', 'success');
+                                  }}
+                                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>📋</span>
+                                  <span>Copiar Ficha Completa</span>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTab('suppliers');
+                                    if (sup) setAdminSelectedSupplierId(sup.id);
+                                  }}
+                                  className="px-3 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>Ver no Módulo Parceiros ➔</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Linked Customer Orders for this Product */}
+                          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                <span>📋</span> Encomendas & Clientes de Cabinda que solicitaram este código ({linkedOrders.length})
+                              </span>
+                            </div>
+
+                            {linkedOrders.length === 0 ? (
+                              <p className="text-[11px] text-slate-500 italic">
+                                Nenhuma encomenda vinculada a este código de artigo até ao momento.
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                {linkedOrders.map(ord => (
+                                  <div key={ord.id} className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-lg text-xs space-y-1.5 flex flex-col justify-between">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-mono text-[10px] font-bold text-amber-400">{ord.id}</span>
+                                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 font-bold uppercase">{ord.status}</span>
+                                    </div>
+                                    <div className="text-left text-[11px]">
+                                      <p className="text-white font-semibold">{ord.clientName}</p>
+                                      <p className="text-slate-400 text-[10px]">📞 {ord.clientPhone} • Qtd: {ord.quantity}</p>
+                                    </div>
+                                    <div className="flex items-center justify-between border-t border-slate-700/60 pt-1.5 mt-1">
+                                      <span className="font-mono font-bold text-[10px] text-emerald-400">
+                                        {formatCurrency(ord.totalAmount || (ord.budgetRawPrice || prod.price) * ord.quantity)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveTab('orders');
+                                          setSelectedOrderId(ord.id);
+                                        }}
+                                        className="px-2 py-0.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded text-[9.5px] font-black cursor-pointer"
+                                      >
+                                        Abrir Ordem ➔
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* ADMIN NAVIGATION TABS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 bg-white p-1.5 border border-slate-150 rounded-2xl gap-1.5 shadow-sm" id="admin-nav-tabs">
         <button
@@ -1162,14 +1609,80 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                 {/* Header overview client request info */}
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start gap-4">
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 flex-wrap">
                       <span>Gestão Operativa - {activeOrder.id}</span>
                       <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-bold uppercase">
                         {activeOrder.status}
                       </span>
+                      {activeOrder.productCode && (
+                        <span className="text-[10px] font-mono font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-2xs">
+                          🏷️ {activeOrder.productCode}
+                        </span>
+                      )}
                     </h4>
                     <p className="text-xs text-slate-600 mt-1 font-medium">Cliente: <strong>{activeOrder.clientName}</strong> ({activeOrder.clientPhone})</p>
-                    <p className="text-xs text-slate-500">Artigo: {activeOrder.productName} | Qtd: {activeOrder.quantity}</p>
+                    
+                    {/* Product & Catalog Reference with Image */}
+                    {(() => {
+                      const matchedProd = supplierProducts.find(p => 
+                        (activeOrder.productCode && getProductCode(p).toUpperCase() === activeOrder.productCode.toUpperCase()) ||
+                        p.name.toLowerCase().includes(activeOrder.productName.toLowerCase()) ||
+                        activeOrder.productName.toLowerCase().includes(p.name.toLowerCase())
+                      );
+
+                      return (
+                        <div className="mt-2 flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
+                          {matchedProd && matchedProd.photoUrl ? (
+                            <div 
+                              onClick={() => setAdminImagePreviewUrl({ url: matchedProd.photoUrl, title: `${getProductCode(matchedProd)} - ${matchedProd.name}` })}
+                              className="relative group cursor-pointer w-12 h-12 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-200"
+                              title="Clique para ver a foto do produto em tamanho real"
+                            >
+                              <img 
+                                src={matchedProd.photoUrl} 
+                                alt={matchedProd.name} 
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform" 
+                                referrerPolicy="no-referrer" 
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[8px] text-white font-bold">
+                                🔍 Ver
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-800 text-base shrink-0">
+                              📦
+                            </div>
+                          )}
+                          <div className="flex-1 text-left">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-slate-850 truncate">{activeOrder.productName}</p>
+                              {matchedProd && (
+                                <span className="text-[9px] font-mono font-black bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded border border-amber-200">
+                                  {getProductCode(matchedProd)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500">
+                              Quantidade: <strong>{activeOrder.quantity} un.</strong> {matchedProd ? `• Preço Catálogo: ${matchedProd.price.toLocaleString('pt-AO')} AOA` : ''}
+                            </p>
+                          </div>
+                          {matchedProd && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSupplierSubTab('products');
+                                setActiveTab('suppliers');
+                                setAdminProductCodeSearch(getProductCode(matchedProd));
+                              }}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[9px] font-bold uppercase transition-colors shrink-0"
+                            >
+                              Ver no Catálogo ➔
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {activeOrder.notes && (
                       <p className="mt-2 text-[11px] p-2 bg-white rounded-lg border border-slate-150 text-slate-500 italic">
                         "Obs: {activeOrder.notes}"
@@ -2304,7 +2817,19 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
             
             {/* Left: Supplier Base Directory */}
             <div className="lg:col-span-4 bg-white border border-slate-150 rounded-2xl p-4 shadow-sm space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Parceiros Registados ({suppliers.length})</h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  Parceiros Registados ({suppliers.length})
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSupplierModal(true)}
+                  className="px-2.5 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[10.5px] rounded-xl transition-all cursor-pointer shadow-xs flex items-center gap-1 active:scale-95"
+                >
+                  <span>➕</span>
+                  <span>Nova Empresa</span>
+                </button>
+              </div>
               
               <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1">
                 {suppliers.map((sup) => {
@@ -2332,6 +2857,9 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                         <div className="overflow-hidden">
                           <p className="font-bold text-xs text-slate-800 truncate">{sup.name}</p>
                           <p className="text-[10px] text-slate-500 font-semibold">{sup.city} • {sup.category}</p>
+                          {sup.nif && (
+                            <p className="text-[9px] text-slate-400 font-mono">NIF: {sup.nif}</p>
+                          )}
                         </div>
                       </div>
                       <span className={`text-[8px] px-1.5 py-0.5 rounded-sm uppercase tracking-wide shrink-0 font-bold ${plansBadge}`}>
@@ -2453,10 +2981,288 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       {supplierSubTab === 'products' && (
                         <div className="space-y-4 animate-fade-in">
 
+                          {/* Search by Product Code / Identity SKU Bar */}
+                          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-white shadow-sm space-y-3">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                              <div>
+                                <span className="text-[8.5px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                  Localizador de Artigo por Código
+                                </span>
+                                <h5 className="text-xs font-bold text-white mt-1 flex items-center gap-1.5">
+                                  🔎 Pesquisa de Artigos Homologados & Pedidos Vinculados
+                                </h5>
+                                <p className="text-[11px] text-slate-300 font-medium">
+                                  Pesquise pelo código gerado (ex: <span className="font-mono text-amber-300 font-bold">PRD-1001</span>), nome do artigo ou fornecedor para ver a foto, stock e solicitações de clientes.
+                                </p>
+                              </div>
+                              {adminProductCodeSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAdminProductCodeSearch('')}
+                                  className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer"
+                                >
+                                  Limpar Pesquisa ✕
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Insira o código do artigo (ex: PRD-1001, PRD-1002) ou nome do produto..."
+                                value={adminProductCodeSearch}
+                                onChange={(e) => setAdminProductCodeSearch(e.target.value)}
+                                className="w-full bg-slate-800 text-white placeholder:text-slate-400 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none transition-all"
+                              />
+                            </div>
+
+                            {/* Matching Products Search Results Dropdown / Panel */}
+                            {adminProductCodeSearch.trim().length > 0 && (() => {
+                              const q = adminProductCodeSearch.toLowerCase().trim();
+                              const matched = supplierProducts.filter(p => {
+                                const pCode = getProductCode(p).toLowerCase();
+                                const pName = p.name.toLowerCase();
+                                const pDesc = (p.description || '').toLowerCase();
+                                const pLoc = (p.location || '').toLowerCase();
+                                return pCode.includes(q) || pName.includes(q) || pDesc.includes(q) || pLoc.includes(q);
+                              });
+
+                              return (
+                                <div className="mt-3 bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3 animate-fade-in">
+                                  <div className="flex items-center justify-between text-xs border-b border-slate-700 pb-2">
+                                    <span className="font-bold text-amber-400">
+                                      📦 Resultados Encontrados ({matched.length})
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      Filtro: "{adminProductCodeSearch}"
+                                    </span>
+                                  </div>
+
+                                  {matched.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-3 text-center italic">
+                                      Nenhum artigo encontrado com o código ou nome "{adminProductCodeSearch}". Verifique o código digitado.
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {matched.map(prod => {
+                                        const code = getProductCode(prod);
+                                        const linkedOrders = orders.filter(o => 
+                                          (o.productCode && o.productCode.toUpperCase() === code.toUpperCase()) ||
+                                          o.productName.toLowerCase().includes(prod.name.toLowerCase()) ||
+                                          (o.notes && o.notes.includes(code))
+                                        );
+                                        const prodSup = suppliers.find(s => s.id === prod.supplierId);
+
+                                        return (
+                                          <div key={prod.id} className="bg-slate-900 border border-slate-750 p-3.5 rounded-xl text-slate-200 space-y-3">
+                                            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                                              <div className="flex gap-3 items-center">
+                                                {/* Clickable Image Thumbnail */}
+                                                <div 
+                                                  onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                                                  className="relative group cursor-pointer w-16 h-16 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0"
+                                                  title="Clique para ver imagem em ecrã inteiro"
+                                                >
+                                                  <img 
+                                                    src={prod.photoUrl} 
+                                                    alt={prod.name} 
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                                                    referrerPolicy="no-referrer" 
+                                                  />
+                                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[10px] text-white font-bold">
+                                                    🔍 Ver
+                                                  </div>
+                                                </div>
+
+                                                <div className="text-left space-y-0.5">
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-mono text-[10px] font-black text-slate-950 bg-amber-400 px-2 py-0.5 rounded-md">
+                                                      🏷️ {code}
+                                                    </span>
+                                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                                                      prod.availability === 'imediata' ? 'bg-emerald-900 text-emerald-300' :
+                                                      prod.availability === 'sob-pedido' ? 'bg-amber-900 text-amber-300' :
+                                                      'bg-red-900 text-red-300'
+                                                    }`}>
+                                                      {prod.availability}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-400">Stock: {prod.stock} un.</span>
+                                                  </div>
+                                                  <h6 className="font-bold text-xs text-white">{prod.name}</h6>
+                                                  <p className="text-[11px] font-mono font-black text-amber-300">
+                                                    {prod.price.toLocaleString('pt-AO')} AOA
+                                                  </p>
+                                                  <p className="text-[10px] text-slate-400">
+                                                    📍 {prod.location || 'Luanda'} {prodSup ? `• Parceiro: ${prodSup.name}` : ''}
+                                                  </p>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex gap-2 w-full sm:w-auto justify-end">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    navigator.clipboard?.writeText(code);
+                                                    showModalAlert('Código Copiado! 📋', `O código de identidade ${code} foi copiado para a sua área de transferência.`, 'info');
+                                                  }}
+                                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-700 cursor-pointer"
+                                                >
+                                                  Copiar Código 📋
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                                                  className="px-2.5 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg cursor-pointer"
+                                                >
+                                                  Ver Foto 🖼️
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            {/* Full Supplier Identity Section within search card */}
+                                            {prodSup && (
+                                              <div className="bg-slate-950/80 border border-amber-400/30 rounded-xl p-3 space-y-2 text-left">
+                                                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                                                  <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                                                    <span>🏢</span> EMPRESA FORNECEDORA: {prodSup.name}
+                                                  </span>
+                                                  <span className="text-[8.5px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded uppercase">
+                                                    {prodSup.plan}
+                                                  </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10.5px]">
+                                                  <div>
+                                                    <span className="text-[9px] text-slate-400 uppercase block">NIF / Responsável:</span>
+                                                    <span className="font-mono text-slate-200 font-bold">{prodSup.nif || '5401928374'}</span>
+                                                    <p className="text-slate-300 text-[10px]">{prodSup.contactPerson || 'Gestor Comercial'}</p>
+                                                  </div>
+
+                                                  <div>
+                                                    <span className="text-[9px] text-slate-400 uppercase block">Telefone / WhatsApp:</span>
+                                                    <span className="font-mono text-emerald-400 font-bold">{prodSup.phoneHidden || prodSup.whatsapp}</span>
+                                                    <p className="text-[9px] text-slate-500">{prodSup.emailHidden || 'comercial@empresa.ao'}</p>
+                                                  </div>
+
+                                                  <div>
+                                                    <span className="text-[9px] text-slate-400 uppercase block">Endereço Armazém:</span>
+                                                    <span className="text-slate-200 text-[10px] font-semibold line-clamp-2">{prodSup.addressHidden || 'Luanda, Angola'}</span>
+                                                  </div>
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setAdminInspectedProduct(prod)}
+                                                    className="px-2.5 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-[9.5px] font-black flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    📄 Ver Ficha Completa
+                                                  </button>
+
+                                                  <a
+                                                    href={`https://wa.me/${(prodSup.whatsapp || prodSup.phoneHidden || '').replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${prodSup.name}! Somos do Mediador Cabinda. Temos cliente interessado no artigo [${code}] (${prod.name}). Solicitamos confirmação de stock e envio de dados para levantamento.`)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    💬 WhatsApp Vendedor
+                                                  </a>
+
+                                                  <a
+                                                    href={`tel:${(prodSup.phoneHidden || prodSup.whatsapp || '').replace(/\D/g, '')}`}
+                                                    className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    📞 Ligar ({prodSup.phoneHidden})
+                                                  </a>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Linked Orders / Purchase Requests for this Product */}
+                                            <div className="border-t border-slate-800 pt-2.5 space-y-1.5">
+                                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                                <span>📋</span> Pedidos e Compras Diretas Registadas ({linkedOrders.length})
+                                              </p>
+                                              {linkedOrders.length === 0 ? (
+                                                <p className="text-[11px] text-slate-500 italic pl-1">
+                                                  Nenhum pedido de compra ou orçamento vinculado até ao momento.
+                                                </p>
+                                              ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                                  {linkedOrders.map(ord => (
+                                                    <div key={ord.id} className="bg-slate-800/80 border border-slate-700 p-2.5 rounded-lg text-xs space-y-1.5 flex flex-col justify-between">
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="font-mono text-[10px] font-bold text-amber-400">{ord.id}</span>
+                                                        <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 font-bold uppercase">{ord.status}</span>
+                                                      </div>
+                                                      <div className="text-left text-[11px]">
+                                                        <p className="text-white font-semibold">{ord.clientName}</p>
+                                                        <p className="text-slate-400 text-[10px]">📞 {ord.clientPhone} • Qtd: {ord.quantity}</p>
+                                                      </div>
+                                                      <div className="flex items-center justify-between border-t border-slate-700/60 pt-1.5 mt-1">
+                                                        <span className="font-mono font-bold text-[10px] text-emerald-400">
+                                                          {formatCurrency(ord.totalAmount || (ord.budgetRawPrice || prod.price) * ord.quantity)}
+                                                        </span>
+                                                        <div className="flex gap-1">
+                                                          <a
+                                                            href={`https://wa.me/${ord.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${ord.clientName}! Vimos o seu pedido ${ord.id} referente ao artigo ${code} (${prod.name}) no Mediador Cabinda. Estamos ao seu dispor!`)}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-bold"
+                                                          >
+                                                            WhatsApp 💬
+                                                          </a>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setActiveTab('orders');
+                                                              setSelectedOrderId(ord.id);
+                                                            }}
+                                                            className="px-2 py-0.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded text-[9px] font-black cursor-pointer"
+                                                          >
+                                                            Abrir ➔
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
                           {/* Add Product Form */}
                       {showAddProductForm && (
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-slide-up">
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">CADASTRAR E PUBLICAR PRODUTO HOMOLOGADO</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">CADASTRAR E PUBLICAR PRODUTO HOMOLOGADO</p>
+                            <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                              Novo Código: PRD-{1000 + supplierProducts.length + 1}
+                            </span>
+                          </div>
+
+                          {/* Auto assigned code preview banner */}
+                          <div className="bg-amber-500/10 border border-amber-300/80 p-3 rounded-xl flex items-center justify-between">
+                            <div className="text-left">
+                              <p className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
+                                <span>🏷️</span> Código de Identidade Atribuído Automaticamente
+                              </p>
+                              <p className="text-[10px] text-amber-800">
+                                Este código exclusivo será usado para identificar a mercadoria e permitir pesquisa direta por imagem e dados na gestão.
+                              </p>
+                            </div>
+                            <span className="font-mono text-xs font-black text-amber-950 bg-amber-200 px-3 py-1 rounded-lg border border-amber-300 shadow-2xs">
+                              PRD-{1000 + supplierProducts.length + 1}
+                            </span>
+                          </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-800">
                             <div>
                               <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Nome do Artigo</label>
@@ -2715,8 +3521,11 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                   return;
                                 }
 
+                                const generatedCode = `PRD-${1000 + supplierProducts.length + 1}`;
+
                                 const newProd: SupplierProduct = {
                                   id: `sup_prod-${Date.now()}`,
+                                  productCode: generatedCode,
                                   supplierId: curSup.id,
                                   name: adminNewProductForm.name,
                                   description: adminNewProductForm.description,
@@ -2747,8 +3556,8 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                 setShowAddProductForm(false);
 
                                 setCustomDialog({
-                                  title: "Anúncio Publicado com Sucesso! 🚀",
-                                  message: `O artigo corporativo "${newProd.name}" foi cadastrado no catálogo e publicado com sucesso no mercado de Cabinda.\n\nDeseja alternar agora mesmo para a aba de Cliente para ver o mercado de artigos e confirmar como o produto ficou visível para compra?`,
+                                  title: "Artigo Homologado Publicado! 🚀",
+                                  message: `O artigo corporativo "${newProd.name}" foi cadastrado com o Código de Identidade "${generatedCode}" e publicado no mercado de Cabinda.\n\nDeseja alternar agora mesmo para a aba de Cliente para ver o mercado de artigos e confirmar a exibição?`,
                                   type: "success",
                                   primaryAction: {
                                     label: "Sim, Ir Ver no Mercado ➔",
@@ -2769,10 +3578,10 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       )}
 
                       {/* Product listing grid (Collapsed behind details/summary for zero clutter - Requirement) */}
-                      <details className="group border border-slate-150 rounded-2xl bg-slate-50/50 p-4 transition-all" id="admin-product-disclosure">
+                      <details className="group border border-slate-150 rounded-2xl bg-slate-50/50 p-4 transition-all" id="admin-product-disclosure" open>
                         <summary className="list-none flex items-center justify-between cursor-pointer font-black text-xs text-slate-500 uppercase tracking-widest select-none">
                           <span className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
-                            📦 Ver Artigos Cadastrados nesta Empresa ({curProducts.length})
+                            📦 Artigos Cadastrados nesta Empresa ({curProducts.length})
                           </span>
                           <span className="text-sm text-slate-400 group-open:rotate-180 transition-transform">▼</span>
                         </summary>
@@ -2783,13 +3592,31 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                           ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {curProducts.map(prod => {
+                                const code = getProductCode(prod);
                                 return (
-                                  <div key={prod.id} className="bg-white p-3 rounded-2xl border border-slate-150 flex flex-col justify-between gap-3 text-slate-800 shadow-2xs">
+                                  <div key={prod.id} className="bg-white p-3.5 rounded-2xl border border-slate-150 flex flex-col justify-between gap-3 text-slate-800 shadow-2xs">
                                     <div className="flex gap-3">
-                                      <img src={prod.photoUrl} alt={prod.name} className="w-16 h-16 rounded-xl object-cover bg-slate-200 shrink-0 border border-slate-200" referrerPolicy="no-referrer" />
-                                      <div className="space-y-1 overflow-hidden text-left">
+                                      {/* Clickable Image to preview full size */}
+                                      <div 
+                                        onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                                        className="relative group cursor-pointer w-20 h-20 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200"
+                                        title="Clique para ver imagem ampliada"
+                                      >
+                                        <img src={prod.photoUrl} alt={prod.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" referrerPolicy="no-referrer" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[10px] text-white font-bold">
+                                          🔍 Ver
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1 overflow-hidden text-left flex-1">
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className="font-mono text-[9px] font-black text-slate-950 bg-amber-400 px-2 py-0.5 rounded-md">
+                                            🏷️ {code}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400 font-bold">Qtd: {prod.stock}</span>
+                                        </div>
                                         <h5 className="font-bold text-xs text-slate-850 truncate">{prod.name}</h5>
-                                        <p className="text-[10px] text-slate-600 font-mono font-bold tracking-tight">{prod.price.toLocaleString('pt-AO')} AOA</p>
+                                        <p className="text-[11px] text-slate-800 font-mono font-black tracking-tight">{prod.price.toLocaleString('pt-AO')} AOA</p>
                                         
                                         <div className="text-[9.5px] text-slate-500 font-semibold flex flex-col gap-0.5 my-1">
                                           <span>📍 Local: <strong>{prod.location || 'Luanda'}</strong></span>
@@ -2804,7 +3631,6 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                           }`}>
                                             {prod.availability}
                                           </span>
-                                          <span className="text-[9px] text-slate-400 font-bold">Qty: {prod.stock}</span>
                                         </div>
                                       </div>
                                     </div>
@@ -2837,6 +3663,18 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                           }`}
                                         >
                                           {prod.published ? "Visível ✅" : "Oculto 🚫"}
+                                        </button>
+
+                                        {/* Filter / Search by this code */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setAdminProductCodeSearch(code);
+                                            window.scrollTo({ top: 400, behavior: 'smooth' });
+                                          }}
+                                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-[9px] font-bold uppercase cursor-pointer"
+                                        >
+                                          Ver Pedidos 📋
                                         </button>
                                       </div>
 
@@ -4657,6 +5495,62 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
         </div>
       )}
 
+      {/* Admin High-Resolution Product Image Lightbox Modal */}
+      {adminImagePreviewUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+          onClick={() => setAdminImagePreviewUrl(null)}
+        >
+          <div 
+            className="relative bg-slate-900 border border-slate-700/80 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/60">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-sm">🖼️</span>
+                <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                  {adminImagePreviewUrl.title || "Visualização da Imagem do Artigo"}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdminImagePreviewUrl(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body: Image */}
+            <div className="p-4 sm:p-6 flex items-center justify-center bg-slate-950/40 overflow-auto flex-1 min-h-[250px] max-h-[65vh]">
+              <img 
+                src={adminImagePreviewUrl.url} 
+                alt={adminImagePreviewUrl.title || "Foto do Artigo"} 
+                className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl shadow-lg border border-slate-800"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2">
+              <p className="text-[10px] text-slate-400">
+                Identificador de Produto Homologado • Mediador Cabinda
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdminImagePreviewUrl(null)}
+                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* INVOICE MODAL IN ADMINDASHBOARD */}
       {showInvoiceModal && activeOrder && (
         <div className="fixed inset-0 bg-slate-950/90 z-55 flex items-center justify-center p-4 overflow-y-auto" id="adm-invoice-modal">
@@ -4835,6 +5729,525 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
           </div>
         </div>
       )}
+
+      {/* 🏢 MODAL DE CADASTRO DE NOVA EMPRESA / VENDEDOR PARCEIRO */}
+      {showAddSupplierModal && (
+        <div className="fixed inset-0 z-55 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 overflow-hidden shadow-2xl animate-scale-up my-6 text-slate-800">
+            {/* Header */}
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-lg font-black shrink-0">
+                  🏢
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wide">
+                    Cadastrar Nova Empresa / Vendedor Parceiro
+                  </h3>
+                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+                    Registe a empresa vendedora com todos os dados de contacto comercial, NIF e endereço para publicar os seus artigos.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddSupplierModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <div className="p-5 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl text-[11px] text-amber-900 leading-relaxed font-semibold">
+                🔒 <strong>Regra de Sigilo Mediador:</strong> O telefone, e-mail e endereço da empresa ficam confidenciais e exclusivos para a gestão. O cliente final apenas visualiza a mercadoria e negocia através da nossa intermediação segura.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-slate-800">
+                {/* Nome da Empresa */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Nome da Empresa / Razão Social *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Mundo Digital Angola Lda, Sotecma Equipamentos..."
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.name}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, name: e.target.value })}
+                  />
+                </div>
+
+                {/* NIF */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    NIF / Registo Comercial *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 5417089230"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.nif}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, nif: e.target.value })}
+                  />
+                </div>
+
+                {/* Responsável Comercial */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Nome do Responsável / Gestor de Contas *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Eng. Domingos Afonso, Sr. Silva..."
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.contactPerson}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, contactPerson: e.target.value })}
+                  />
+                </div>
+
+                {/* Telefone / WhatsApp */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Telefone Principal / WhatsApp Comercial *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: +244 945 777 888"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-700 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.phoneHidden}
+                    onChange={(e) => setAdminNewSupplierForm({ 
+                      ...adminNewSupplierForm, 
+                      phoneHidden: e.target.value,
+                      whatsapp: adminNewSupplierForm.whatsapp || e.target.value
+                    })}
+                  />
+                </div>
+
+                {/* WhatsApp Específico */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    WhatsApp para Solicitação de Compras
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: +244 945 777 888"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-700 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.whatsapp}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, whatsapp: e.target.value })}
+                  />
+                </div>
+
+                {/* E-mail Comercial */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    E-mail Comercial Oficial
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="Ex: comercial@empresa.ao"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.emailHidden}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, emailHidden: e.target.value })}
+                  />
+                </div>
+
+                {/* Província / Cidade */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Província / Município do Polo
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.city}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, city: e.target.value })}
+                  >
+                    <option value="Luanda">Luanda (Polo Principal de Fornecimento)</option>
+                    <option value="Cabinda">Cabinda (Polo Local)</option>
+                    <option value="Benguela">Benguela (Polo Logístico)</option>
+                    <option value="Huambo">Huambo</option>
+                    <option value="Lubango">Lubango</option>
+                  </select>
+                </div>
+
+                {/* Ramo / Categoria */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Ramo / Categoria de Atuação
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.category}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, category: e.target.value })}
+                  >
+                    <option value="Eletrónicos e Tecnologia">Eletrónicos e Tecnologia</option>
+                    <option value="Construção e Ferramentas">Construção e Ferramentas</option>
+                    <option value="Energia e Geradores">Energia e Geradores</option>
+                    <option value="Material Elétrico">Material Elétrico</option>
+                    <option value="Automóvel e Peças">Automóvel e Peças</option>
+                    <option value="Alimentação e Bebidas">Alimentação e Bebidas</option>
+                    <option value="Comércio Geral e Importação">Comércio Geral e Importação</option>
+                  </select>
+                </div>
+
+                {/* Plano de Parceria */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Plano de Destaque Homologado
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.plan}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, plan: e.target.value as any })}
+                  >
+                    <option value="diamante">💎 DIAMANTE (Prioridade Máxima)</option>
+                    <option value="ouro">🥇 OURO (Recomendado)</option>
+                    <option value="prata">🥈 PRATA</option>
+                    <option value="gratuito">⚪ GRATUITO / BÁSICO</option>
+                  </select>
+                </div>
+
+                {/* Endereço Físico do Armazém */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Endereço Físico Completo do Armazém / Loja para Levantamento *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Maculusso, Rua Amílcar Cabral, Nº 44, Luanda, Angola"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none transition-all"
+                    value={adminNewSupplierForm.addressHidden}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, addressHidden: e.target.value })}
+                  />
+                </div>
+
+                {/* Descrição da Empresa */}
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600 uppercase">
+                    Breve Descrição Institucional / Termos de Venda
+                  </label>
+                  <textarea
+                    placeholder="Ex: Empresa distribuidora oficial de informática com emissão de fatura pró-forma e garantia de 12 meses..."
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-amber-400 focus:bg-white rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:outline-none transition-all h-20"
+                    value={adminNewSupplierForm.description}
+                    onChange={(e) => setAdminNewSupplierForm({ ...adminNewSupplierForm, description: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowAddSupplierModal(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!adminNewSupplierForm.name.trim()) {
+                    showModalAlert("Nome Requerido ⚠️", "Por favor introduza o nome da empresa ou razão social.", "warning");
+                    return;
+                  }
+
+                  const newSupId = `supp-${Date.now()}`;
+                  const newSupplier: Supplier = {
+                    id: newSupId,
+                    name: adminNewSupplierForm.name.trim(),
+                    city: adminNewSupplierForm.city.trim() || 'Luanda',
+                    category: adminNewSupplierForm.category.trim() || 'Comércio Geral',
+                    nif: adminNewSupplierForm.nif.trim() || '5401928374',
+                    contactPerson: adminNewSupplierForm.contactPerson.trim() || 'Responsável Comercial',
+                    phoneHidden: adminNewSupplierForm.phoneHidden.trim() || '+244 945 777 888',
+                    whatsapp: adminNewSupplierForm.whatsapp.trim() || adminNewSupplierForm.phoneHidden.trim() || '+244 945 777 888',
+                    emailHidden: adminNewSupplierForm.emailHidden.trim() || 'comercial@empresa.ao',
+                    addressHidden: adminNewSupplierForm.addressHidden.trim() || 'Luanda, Angola',
+                    plan: adminNewSupplierForm.plan || 'ouro',
+                    rating: 5.0,
+                    reviewsCount: 1,
+                    description: adminNewSupplierForm.description.trim() || 'Empresa parceira homologada para fornecimento e expedição de artigos.',
+                    logoUrl: adminNewSupplierForm.logoUrl || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=100&auto=format&fit=crop&q=60',
+                    createdAt: new Date().toISOString()
+                  };
+
+                  onCreateSupplier(newSupplier);
+                  setAdminSelectedSupplierId(newSupId);
+                  setSelectedSupplierChatId(newSupId);
+                  setShowAddSupplierModal(false);
+
+                  // reset
+                  setAdminNewSupplierForm({
+                    name: '',
+                    city: 'Luanda',
+                    category: 'Eletrónicos e Tecnologia',
+                    nif: '',
+                    contactPerson: '',
+                    phoneHidden: '',
+                    whatsapp: '',
+                    emailHidden: '',
+                    addressHidden: '',
+                    plan: 'ouro',
+                    description: '',
+                    logoUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=100&auto=format&fit=crop&q=60'
+                  });
+
+                  setCustomDialog({
+                    title: "Empresa Cadastrada com Sucesso! 🏢",
+                    message: `A empresa "${newSupplier.name}" foi registada com NIF ${newSupplier.nif}, telefone ${newSupplier.phoneHidden} e endereço do armazém.\n\nPode agora publicar artigos homologados vinculados a esta empresa!`,
+                    type: "success"
+                  });
+                }}
+                className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+              >
+                <span>💾</span>
+                <span>Salvar e Registar Empresa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📄 MODAL DE FICHA COMPLETA DO ARTIGO & EMPRESA VENDEDORA */}
+      {adminInspectedProduct && (() => {
+        const prod = adminInspectedProduct;
+        const code = getProductCode(prod);
+        const sup = suppliers.find(s => s.id === prod.supplierId);
+        const sellerPhone = sup?.phoneHidden || sup?.whatsapp || '+244 923 000 000';
+        const cleanPhone = sellerPhone.replace(/\D/g, '');
+        const whatsappMsg = `Olá ${sup?.name || 'Parceiro'}! Somos da Direção de Intermediação do Mediador Cabinda Lda. Temos um cliente em Cabinda interessado no artigo [CÓDIGO: ${code}] (${prod.name}). Solicitamos confirmação de stock imediato e envio de dados para faturação e levantamento da mercadoria. Obrigado!`;
+
+        return (
+          <div 
+            className="fixed inset-0 z-55 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in"
+            onClick={() => setAdminInspectedProduct(null)}
+          >
+            <div 
+              className="bg-slate-900 border-2 border-amber-400/50 rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl text-slate-200 animate-scale-up my-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-slate-950 p-4 sm:p-5 flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-lg font-black shrink-0">
+                    🏷️
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black text-slate-950 bg-amber-400 px-2 py-0.5 rounded-md">
+                        {code}
+                      </span>
+                      <h3 className="text-sm sm:text-base font-black text-white">
+                        Ficha de Intermediação do Artigo & Vendedor
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Identificador Oficial de Produto Homologado • Mediador Cabinda Lda.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminInspectedProduct(null)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                  
+                  {/* Photo with zoom */}
+                  <div className="md:col-span-5 flex flex-col items-center">
+                    <div 
+                      onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                      className="relative group cursor-pointer w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-slate-700 hover:border-amber-400 transition-all shadow-lg"
+                    >
+                      <img 
+                        src={prod.photoUrl} 
+                        alt={prod.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                        referrerPolicy="no-referrer" 
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-xs text-white font-bold gap-1">
+                        <span className="text-base">🔍</span>
+                        <span>Ampliar Fotografia</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAdminImagePreviewUrl({ url: prod.photoUrl, title: `${code} - ${prod.name}` })}
+                      className="mt-2 text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      🔍 Ver Foto em Ecrã Inteiro
+                    </button>
+                  </div>
+
+                  {/* Technical & Price Info */}
+                  <div className="md:col-span-7 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs font-black text-slate-950 bg-amber-400 px-2 py-0.5 rounded-md">
+                        {code}
+                      </span>
+                      <span className={`text-[9.5px] px-2 py-0.5 rounded-md font-bold uppercase ${
+                        prod.availability === 'imediata' ? 'bg-emerald-900/80 text-emerald-300 border border-emerald-700' :
+                        prod.availability === 'sob-pedido' ? 'bg-amber-900/80 text-amber-300 border border-amber-700' :
+                        'bg-red-900/80 text-red-300 border border-red-700'
+                      }`}>
+                        {prod.availability === 'imediata' ? '✓ Em Stock Imediato' : prod.availability === 'sob-pedido' ? '⏳ Sob Pedido' : '✕ Esgotado'}
+                      </span>
+                      <span className="text-[10px] text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded-md">
+                        Stock: {prod.stock} un.
+                      </span>
+                      <span className="text-[10px] text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded-md">
+                        📍 {prod.location || 'Luanda'}
+                      </span>
+                    </div>
+
+                    <h4 className="text-lg font-black text-white">{prod.name}</h4>
+
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-bold uppercase">Preço Fornecedor:</span>
+                      <span className="text-xl font-mono font-black text-amber-300">
+                        {prod.price.toLocaleString('pt-AO')} AOA
+                      </span>
+                    </div>
+
+                    {prod.description && (
+                      <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed font-medium">
+                        {prod.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Seller Company Complete Data */}
+                <div className="bg-slate-950 border-2 border-amber-400/40 rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <h5 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🏢</span> DADOS COMPLETOS DA EMPRESA QUE ESTÁ A VENDER
+                    </h5>
+                    {sup && (
+                      <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md uppercase">
+                        Plano {sup.plan}
+                      </span>
+                    )}
+                  </div>
+
+                  {sup ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Nome da Empresa:</span>
+                        <p className="font-extrabold text-white text-sm">{sup.name}</p>
+                        <p className="text-[10px] text-slate-400">{sup.category} • {sup.city}</p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">NIF / Identificação Fiscal:</span>
+                        <p className="font-mono font-bold text-amber-300 text-xs">{sup.nif || '5401928374'}</p>
+                        <p className="text-[10px] text-slate-400">Responsável: {sup.contactPerson || 'Gestor Comercial'}</p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Telefone Principal / WhatsApp:</span>
+                        <p className="font-mono font-bold text-emerald-400 text-xs">{sellerPhone}</p>
+                        <p className="text-[9px] text-slate-500">🔒 Confidencial Gestão Mediador</p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">E-mail Comercial:</span>
+                        <p className="font-mono text-slate-200 text-xs truncate">{sup.emailHidden || 'contacto@empresa.ao'}</p>
+                        <a
+                          href={`mailto:${sup.emailHidden || 'contacto@empresa.ao'}?subject=${encodeURIComponent(`Intermediação - Artigo ${code} (${prod.name})`)}`}
+                          className="text-[10px] text-sky-400 hover:underline"
+                        >
+                          ✉️ Enviar E-mail ao Fornecedor
+                        </a>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Endereço Físico do Armazém / Loja:</span>
+                        <p className="text-slate-200 text-xs font-semibold flex items-start gap-1">
+                          <span>📍</span>
+                          <span>{sup.addressHidden || 'Armazém Central, Luanda, Angola'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Fornecedor não associado.</p>
+                  )}
+
+                  {/* Fast Action Buttons */}
+                  <div className="border-t border-slate-800 pt-3.5 flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a
+                        href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md active:scale-97 cursor-pointer"
+                      >
+                        <span>💬</span>
+                        <span>Solicitar Vendedor no WhatsApp</span>
+                      </a>
+
+                      <a
+                        href={`tel:${cleanPhone}`}
+                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                      >
+                        <span>📞</span>
+                        <span>Ligar ({sellerPhone})</span>
+                      </a>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fullText = `FICHA DE INTERMEDIAÇÃO • MEDIADOR CABINDA LDA.\n` +
+                          `-------------------------------------------\n` +
+                          `CÓDIGO ARTIGO: ${code}\n` +
+                          `PRODUTO: ${prod.name}\n` +
+                          `PREÇO BASE: ${prod.price.toLocaleString('pt-AO')} AOA\n` +
+                          `STOCK: ${prod.stock} un. (${prod.availability})\n` +
+                          `ARMAZÉM: ${prod.location || 'Luanda'}\n\n` +
+                          `EMPRESA VENDEDORA:\n` +
+                          `Nome: ${sup?.name || 'N/A'}\n` +
+                          `NIF: ${sup?.nif || 'N/A'}\n` +
+                          `Responsável: ${sup?.contactPerson || 'N/A'}\n` +
+                          `Telefone / WhatsApp: ${sellerPhone}\n` +
+                          `E-mail: ${sup?.emailHidden || 'N/A'}\n` +
+                          `Endereço: ${sup?.addressHidden || 'N/A'}`;
+                        navigator.clipboard?.writeText(fullText);
+                        showModalAlert('Ficha Completa Copiada! 📋', 'Todos os dados do artigo e da empresa vendedora foram copiados para a sua área de transferência.', 'success');
+                      }}
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>📋</span>
+                      <span>Copiar Ficha Completa</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-950 p-4 border-t border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdminInspectedProduct(null)}
+                  className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-all"
+                >
+                  Fechar Ficha
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

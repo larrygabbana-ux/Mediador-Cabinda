@@ -134,6 +134,7 @@ export default function App() {
 
   // AI Chatbot 24/7 State
   const [showAiBotModal, setShowAiBotModal] = useState(false);
+  const [showBotWelcomeBalloon, setShowBotWelcomeBalloon] = useState(true);
   const [botSettings, setBotSettings] = useState<BotSettings>(() => {
     try {
       const saved = localStorage.getItem('mediador_cabinda_bot_settings');
@@ -1376,16 +1377,22 @@ export default function App() {
                       • Termos de Licenciamento
                     </button>
 
-                    {/* Official Contactos info inside the Support toggle (Requirement 2) */}
+                    {/* Official Contactos info inside the Support toggle */}
                     <div className="mt-3 pt-3 border-t border-slate-100 pl-2 text-[10px] text-slate-500 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <p className="font-extrabold uppercase tracking-wider text-slate-700 text-[9px]">📍 Contactos Oficiais</p>
-                      <p><strong>Cabinda:</strong> Porto Comercial, Pavilhão C-4</p>
-                      <p><strong>Luanda:</strong> Maculusso, Rua da Missão nº 12</p>
+                      <p><strong>Direção Base:</strong> Cabinda</p>
+                      <p><strong>Criador:</strong> João Hilário António</p>
                       <div className="pt-1 border-t border-slate-200/60 mt-1 space-y-1">
                         <p className="flex items-center gap-1">
-                          <strong>📞 Ligações:</strong>{' '}
+                          <strong>📞 Unitel / Express:</strong>{' '}
                           <a href="tel:+244942043293" className="text-sky-600 hover:underline font-bold">
-                            +244 942 043 293
+                            942 043 293
+                          </a>
+                        </p>
+                        <p className="flex items-center gap-1">
+                          <strong>📞 Movicel:</strong>{' '}
+                          <a href="tel:+244998100940" className="text-sky-600 hover:underline font-bold">
+                            998 100 940
                           </a>
                         </p>
                         <p className="flex items-center gap-1">
@@ -1395,15 +1402,15 @@ export default function App() {
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="text-emerald-600 hover:underline font-extrabold flex items-center gap-0.5 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 cursor-pointer"
-                            title="Abrir no WhatsApp Business"
+                            title="Abrir no WhatsApp"
                           >
                             942 043 293 🚀
                           </a>
                         </p>
                         <p className="flex items-center gap-1">
                           <strong>✉️ E-mail:</strong>{' '}
-                          <a href="mailto:hilariogime0@gmail.com" className="text-sky-600 hover:underline font-bold truncate max-w-[150px]" title="Enviar e-mail">
-                            hilariogime0@gmail.com
+                          <a href="mailto:equipemediadorcabindacabinda@gmail.com" className="text-sky-600 hover:underline font-bold truncate max-w-[150px]" title="equipemediadorcabindacabinda@gmail.com">
+                            equipemediadorcabindacabinda@gmail.com
                           </a>
                         </p>
                       </div>
@@ -2018,31 +2025,86 @@ export default function App() {
         </div>
       )}
 
-      {/* FLOATING 24/7 AI CHATBOT BUTTON */}
+      {/* FLOATING 24/7 AI CHATBOT BUTTON & WELCOME BALLOON */}
       {isAuthorized && (
-        <aside aria-label="Assistente Virtual IA 24/7" className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2 pointer-events-auto">
+        <aside aria-label="Assistente Virtual IA 24/7" className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2.5 pointer-events-auto">
+          {/* Modern Welcome Toast / Speech Balloon on App Open */}
+          {showBotWelcomeBalloon && (
+            <div
+              onClick={() => {
+                setShowAiBotModal(true);
+                setShowBotWelcomeBalloon(false);
+                speakText("Assistente Virtual do Mediador Cabinda pronto para ajudar");
+              }}
+              className="group relative cursor-pointer bg-slate-900/95 hover:bg-slate-900 backdrop-blur-md text-white border-2 border-amber-400/80 rounded-2xl p-3.5 shadow-[0_15px_35px_-5px_rgba(0,0,0,0.6)] max-w-[290px] sm:max-w-[320px] animate-balloon-bounce transition-all hover:scale-102 hover:border-amber-300"
+              id="bot-welcome-balloon"
+              role="alert"
+            >
+              {/* Little Speech Bubble Arrow */}
+              <div className="absolute -bottom-2 right-8 w-4 h-4 bg-slate-900 border-r-2 border-b-2 border-amber-400/80 rotate-45"></div>
+
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
+                    🤖
+                  </div>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                    Assistente Mediador IA
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block"></span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowBotWelcomeBalloon(false);
+                  }}
+                  className="text-slate-400 hover:text-white text-xs w-5 h-5 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Fechar mensagem"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-100 font-medium mt-2 leading-relaxed">
+                👋 Olá! Sou o Assistente Inteligente do Mediador-Cabinda. Toque aqui para tirar dúvidas e encontrar o que precisa.
+              </p>
+
+              <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+                <span className="text-amber-400 font-bold flex items-center gap-1">
+                  ✨ Toque para abrir o chat ➔
+                </span>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded-md border border-emerald-500/30">
+                  Online 24/7
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Floating Action Button */}
           <button
             onClick={() => {
               setShowAiBotModal(true);
+              setShowBotWelcomeBalloon(false);
               speakText("Abrindo Assistente Virtual Inteligente 24 horas");
             }}
-            className="group flex items-center gap-2.5 bg-slate-950 hover:bg-slate-900 text-white pl-3 pr-4 py-2.5 rounded-full shadow-2xl border-2 border-amber-400 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            className="group flex items-center gap-3 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-slate-900 hover:to-slate-850 text-white pl-3.5 pr-4.5 py-2.5 sm:py-3 rounded-full border-2 border-amber-400 transition-all hover:scale-105 active:scale-95 cursor-pointer animate-float-gentle animate-glow-pulse"
             id="floating-ai-bot-btn"
             title="Assistente Virtual 24/7 - Dúvidas sobre encomendas, prazos, taxas e pagamentos"
           >
             <div className="relative">
-              <div className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm group-hover:rotate-12 transition-transform">
-                <Bot className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-300 text-slate-950 flex items-center justify-center font-black shadow-md group-hover:rotate-12 transition-transform">
+                <Bot className="w-5 h-5" />
               </div>
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-ping"></span>
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-950 rounded-full"></span>
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-slate-950 rounded-full animate-ping"></span>
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-slate-950 rounded-full shadow-xs"></span>
             </div>
             <div className="text-left hidden sm:block">
               <div className="flex items-center gap-1.5 leading-none">
-                <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">Assistente IA</span>
-                <span className="text-[8px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-500/30">24/7</span>
+                <span className="text-xs font-black uppercase tracking-wider text-amber-300 font-display">Assistente IA</span>
+                <span className="text-[8.5px] bg-emerald-500/20 text-emerald-300 font-black px-1.5 py-0.5 rounded-full border border-emerald-500/40">24/7</span>
               </div>
-              <p className="text-[9.5px] text-slate-300 font-medium mt-0.5 leading-none">Dúvidas? Resposta na hora</p>
+              <p className="text-[10px] text-slate-300 font-medium mt-1 leading-none">Tire dúvidas na hora</p>
             </div>
           </button>
         </aside>

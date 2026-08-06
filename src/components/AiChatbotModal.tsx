@@ -16,17 +16,17 @@ import {
   ArrowRight, 
   Copy, 
   Check, 
-  MessageSquare, 
-  HelpCircle, 
-  ChevronDown, 
   Mic, 
   ExternalLink,
   ShieldCheck,
   Clock,
-  Truck
+  Truck,
+  RotateCcw,
+  MessageSquare,
+  Radio
 } from 'lucide-react';
 import { BotMessage, BotSettings } from '../types';
-import { solveBotQueryLocally, POPULAR_QUESTIONS } from '../utils/aiBotKnowledge';
+import { solveBotQueryLocally } from '../utils/aiBotKnowledge';
 
 interface AiChatbotModalProps {
   isOpen: boolean;
@@ -39,15 +39,28 @@ interface AiChatbotModalProps {
 
 const DEFAULT_SETTINGS: BotSettings = {
   enabled: true,
-  botName: 'Mano Mediador IA',
-  welcomeMessage: 'Olá! Sou o Assistente Virtual 24/7 do Mediador Cabinda. Posso esclarecer qualquer dúvida sobre encomendas, prazos, pagamentos por Multicaixa Express/IBAN e rastreio de cargas.',
-  offHoursMessage: 'Estamos no período noturno/fora de expediente, mas eu estou 100% online para ajudá-lo com respostas imediatas!',
+  botName: 'Assistente Executivo IA',
+  welcomeMessage: 'Bem-vindo ao Mediador Cabinda Lda! Sou o Assistente Virtual Oficial 24/7. Estou pronto para prestar esclarecimentos completos e transparentes sobre o funcionamento da intermediação, prazos de entrega marítimos e aéreos, métodos de pagamento seguros (Multicaixa Express e IBAN) e rastreamento de cargas.',
+  offHoursMessage: 'Estamos no período noturno/fora de expediente presencial, mas o nosso suporte inteligente continua 100% ativo com respostas imediatas.',
   autoReplyInSharedChat: true,
   businessHoursStart: '08:00',
   businessHoursEnd: '18:00',
   allowWhatsAppEscalation: true,
   whatsAppNumber: '+244942043293'
 };
+
+const QUICK_TOPICS = [
+  { label: '⚙️ Como Funciona em 6 Passos', query: 'Como funciona o Mediador Cabinda e quais são os passos do processo?' },
+  { label: '⏱️ Prazos de Entrega', query: 'Quais são os prazos de entrega marítimos e aéreos para Cabinda?' },
+  { label: '💳 Multicaixa Express & IBAN', query: 'Como pagar por Multicaixa Express ou transferência bancária IBAN?' },
+  { label: '💰 Taxas & Comissões', query: 'Quais são as taxas de intermediação, despacho aduaneiro e comissão?' },
+  { label: '🚚 Rastreio de Cargas MED', query: 'Como funciona o código de rastreio MED-XXXX e como acompanhar a carga?' },
+  { label: '🏢 Balcões Luanda & Cabinda', query: 'Onde ficam localizados os armazéns e balcões oficiais de atendimento?' },
+  { label: '🛠️ Serralharia & Oficinas', query: 'Como solicitar serviços de serralharia e fabricação metálica em Cabinda?' },
+  { label: '🛒 Fazer Pedido no App', query: 'Como faço um novo pedido ou encomenda no aplicativo?' },
+  { label: '📜 Fundador João Hilário', query: 'Quem é o fundador e criador do Mediador Cabinda?' },
+  { label: '📞 Falar no WhatsApp', query: 'Quero falar com um atendente humano no WhatsApp oficial' }
+];
 
 export default function AiChatbotModal({
   isOpen,
@@ -76,7 +89,7 @@ export default function AiChatbotModal({
           'Como funciona o Mediador Cabinda?',
           'Quais são os prazos de entrega?',
           'Como pagar por Multicaixa Express ou IBAN?',
-          'Quais as taxas de intermediação?'
+          'Quais as taxas de intermediação e despacho?'
         ]
       }
     ];
@@ -102,7 +115,7 @@ export default function AiChatbotModal({
       scrollToBottom();
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 200);
+      }, 250);
     }
   }, [isOpen, messages]);
 
@@ -143,31 +156,34 @@ export default function AiChatbotModal({
   const handleVoiceInput = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'pt-AO';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'pt-AO';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
 
-      setIsListeningVoice(true);
+        setIsListeningVoice(true);
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInputQuery(transcript);
+        recognition.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInputQuery(transcript);
+          setIsListeningVoice(false);
+          setTimeout(() => handleSendMessage(transcript), 300);
+        };
+
+        recognition.onerror = () => {
+          setIsListeningVoice(false);
+        };
+
+        recognition.onend = () => {
+          setIsListeningVoice(false);
+        };
+
+        recognition.start();
+      } catch {
         setIsListeningVoice(false);
-        setTimeout(() => handleSendMessage(transcript), 300);
-      };
-
-      recognition.onerror = () => {
-        setIsListeningVoice(false);
-      };
-
-      recognition.onend = () => {
-        setIsListeningVoice(false);
-      };
-
-      recognition.start();
+      }
     } else {
-      // Fallback prompt
       const text = prompt('Dite ou escreva a sua dúvida para o Assistente IA:');
       if (text) {
         handleSendMessage(text);
@@ -223,14 +239,16 @@ export default function AiChatbotModal({
           } else if (lower.includes('rastreio') || lower.includes('rastrear') || lower.includes('acompanhar')) {
             actionLink = { label: 'Acompanhar Encomendas', view: 'acompanhar-pedido', icon: '🚚' };
           } else if (lower.includes('pagar') || lower.includes('fatura') || lower.includes('iban')) {
-            actionLink = { label: 'Ver Pagamentos', view: 'pagamentos', icon: '💳' };
+            actionLink = { label: 'Ver Pagamentos & Faturas', view: 'pagamentos', icon: '💳' };
           } else if (lower.includes('servico') || lower.includes('serralharia')) {
-            actionLink = { label: 'Solicitar Serviço', view: 'solicitar-servico', icon: '🛠️' };
+            actionLink = { label: 'Solicitar Serviço de Serralharia', view: 'solicitar-servico', icon: '🛠️' };
+          } else if (lower.includes('sobre') || lower.includes('fundador') || lower.includes('historia')) {
+            actionLink = { label: 'Conhecer Sobre Nós', view: 'sobre-nos', icon: '🏢' };
           }
         }
       }
 
-      // 2. If Gemini API was offline / fallback, use our rich local knowledge engine
+      // 2. If Gemini API was offline / fallback, use our local knowledge engine
       if (!botText) {
         const localAnswer = solveBotQueryLocally(textToSend);
         botText = localAnswer.text;
@@ -251,7 +269,6 @@ export default function AiChatbotModal({
 
       setMessages(prev => [...prev, botMsg]);
 
-      // If global TTS is active, speak the answer
       if (ttsActive) {
         speakText(botText);
       }
@@ -274,7 +291,7 @@ export default function AiChatbotModal({
   };
 
   const handleClearChat = () => {
-    if (confirm('Deseja limpar o histórico da conversa com o Assistente IA?')) {
+    if (confirm('Deseja limpar todo o histórico desta conversa com o Assistente IA?')) {
       const initial: BotMessage[] = [
         {
           id: `welcome-${Date.now()}`,
@@ -285,7 +302,7 @@ export default function AiChatbotModal({
             'Como funciona o Mediador Cabinda?',
             'Quais são os prazos de entrega?',
             'Como pagar por Multicaixa Express ou IBAN?',
-            'Quais as taxas de intermediação?'
+            'Quais as taxas de intermediação e despacho?'
           ]
         }
       ];
@@ -304,33 +321,38 @@ export default function AiChatbotModal({
 
   return (
     <div 
-      className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in"
       id="ai-chatbot-modal"
     >
       <div 
-        className="bg-white w-full sm:max-w-lg h-[92vh] sm:h-[680px] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-scale-up"
+        className="bg-slate-950 text-slate-100 w-full sm:max-w-xl h-[94vh] sm:h-[720px] rounded-t-[32px] sm:rounded-[32px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden border-2 border-amber-400/40 animate-scale-up relative"
         id="ai-chatbot-card"
       >
-        {/* HEADER */}
-        <div className="bg-slate-900 text-white px-4 py-3.5 flex items-center justify-between border-b border-slate-800 shrink-0">
+        {/* Soft Background Radial Light Accents */}
+        <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl"></div>
+        <div className="pointer-events-none absolute -bottom-24 -right-24 w-72 h-72 bg-sky-500/10 rounded-full blur-3xl"></div>
+
+        {/* HIGH-TECH HEADER */}
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-amber-500/20 shrink-0 relative z-10">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-9 h-9 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-300 text-slate-950 flex items-center justify-center font-black shadow-[0_0_15px_rgba(245,158,11,0.5)]">
                 <Bot className="w-5 h-5" />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full animate-pulse"></span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse shadow-sm"></span>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-sm text-white font-display">
+                <h3 className="font-black text-sm text-white font-display tracking-wide">
                   {botSettings.botName || 'Mano Mediador IA'}
                 </h3>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-500/30">
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block"></span>
                   Online 24/7
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium">
-                Atendimento inteligente a qualquer hora (com ou sem expediente)
+              <p className="text-[10.5px] text-slate-400 font-medium">
+                Assistente Inteligente Oficial do Mediador Cabinda
               </p>
             </div>
           </div>
@@ -345,8 +367,8 @@ export default function AiChatbotModal({
                 }
               }}
               title={ttsActive ? 'Desativar Leitura de Voz Automática' : 'Ativar Leitura de Voz Automática'}
-              className={`p-1.5 rounded-xl transition-all cursor-pointer ${
-                ttsActive ? 'bg-amber-400 text-slate-950 font-bold' : 'hover:bg-slate-800 text-slate-400'
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                ttsActive ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
               }`}
             >
               {ttsActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -356,7 +378,7 @@ export default function AiChatbotModal({
             <button
               onClick={handleClearChat}
               title="Limpar Conversa"
-              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded-xl transition-all cursor-pointer"
+              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded-xl transition-all cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -365,64 +387,34 @@ export default function AiChatbotModal({
             <button
               onClick={onClose}
               title="Fechar Assistente"
-              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer ml-1"
+              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* QUICK TOPIC CHIPS BAR */}
-        <div className="bg-amber-50/80 border-b border-amber-100/80 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-          <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider shrink-0 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-600" /> Tópicos:
+        {/* QUICK CATEGORY CHIPS BAR */}
+        <div className="bg-slate-900/90 border-b border-slate-800/80 px-3.5 py-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 relative z-10">
+          <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Tópicos Rápidos:
           </span>
-          <button
-            onClick={() => handleSendMessage('Quais são os prazos de entrega para Cabinda?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            ⏱️ Prazos
-          </button>
-          <button
-            onClick={() => handleSendMessage('Como pagar por Multicaixa Express ou IBAN?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            💳 Pagamentos
-          </button>
-          <button
-            onClick={() => handleSendMessage('Quais são as taxas de intermediação e comissão?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            💰 Taxas
-          </button>
-          <button
-            onClick={() => handleSendMessage('Como rastrear a minha encomenda?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            🚚 Rastreio
-          </button>
-          <button
-            onClick={() => handleSendMessage('Como solicitar serviços de serralharia?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            🛠️ Serviços
-          </button>
-          <button
-            onClick={() => handleSendMessage('Onde fica o armazém e balcão em Cabinda?')}
-            className="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-700 text-[10px] font-bold rounded-lg border border-amber-200/80 shrink-0 transition-all cursor-pointer shadow-2xs"
-          >
-            🏢 Balcões
-          </button>
-          <button
-            onClick={() => handleSendMessage('Quero falar com um operador humano no WhatsApp')}
-            className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-extrabold rounded-lg border border-emerald-300 shrink-0 transition-all cursor-pointer shadow-2xs flex items-center gap-1"
-          >
-            <Phone className="w-2.5 h-2.5 text-emerald-700" /> WhatsApp
-          </button>
+          {QUICK_TOPICS.map((topic, tIdx) => (
+            <button
+              key={tIdx}
+              onClick={() => handleSendMessage(topic.query)}
+              className="px-3 py-1 bg-slate-800/80 hover:bg-amber-400 hover:text-slate-950 text-slate-300 text-[11px] font-semibold rounded-xl border border-slate-700 hover:border-amber-400 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+            >
+              {topic.label}
+            </button>
+          ))}
         </div>
 
-        {/* MESSAGES AREA */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/60" id="ai-chat-messages-container">
+        {/* MESSAGES STREAM AREA */}
+        <div 
+          className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4.5 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" 
+          id="ai-chat-messages-container"
+        >
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
 
@@ -431,42 +423,55 @@ export default function AiChatbotModal({
                 key={msg.id}
                 className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1.5 animate-fade-in`}
               >
-                <div className="flex items-center gap-1.5 px-1">
-                  {!isUser && (
-                    <span className="text-[10px] font-bold text-amber-700 flex items-center gap-1">
-                      🤖 {botSettings.botName || 'Assistente IA'}
-                      {msg.source === 'gemini' && (
-                        <span className="text-[8px] bg-amber-200/60 text-amber-900 px-1.5 py-0.2 rounded-full font-mono">
-                          Gemini
+                {/* Sender Tag Header */}
+                <div className="flex items-center gap-2 px-1">
+                  {!isUser ? (
+                    <span className="text-[10.5px] font-bold text-amber-400 flex items-center gap-1.5">
+                      <Bot className="w-3.5 h-3.5" />
+                      {botSettings.botName || 'Mano Mediador IA'}
+                      {msg.source === 'gemini' ? (
+                        <span className="text-[8.5px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded-full font-mono">
+                          ✨ Gemini AI
+                        </span>
+                      ) : (
+                        <span className="text-[8.5px] bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.2 rounded-full font-mono">
+                          🛡️ Base Oficial
                         </span>
                       )}
                     </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400">
+                      👤 Você
+                    </span>
                   )}
-                  <span className="text-[9px] text-slate-400 font-mono">
+                  <span className="text-[9.5px] text-slate-500 font-mono">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
+                {/* Message Bubble Box */}
                 <div 
-                  className={`max-w-[90%] sm:max-w-[85%] rounded-2xl p-3.5 text-xs shadow-xs leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[92%] sm:max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed whitespace-pre-wrap ${
                     isUser
-                      ? 'bg-slate-900 text-white rounded-tr-xs'
-                      : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs'
+                      ? 'bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 text-slate-950 font-semibold rounded-tr-xs shadow-md shadow-amber-500/10'
+                      : 'bg-slate-900/90 border border-slate-750 text-slate-100 rounded-tl-xs shadow-md shadow-black/40 backdrop-blur-xs'
                   }`}
                 >
-                  {/* Message body text */}
-                  <div className="space-y-2">
+                  {/* Message Body Content */}
+                  <div className="space-y-2.5">
                     {msg.text.split('\n\n').map((paragraph, idx) => (
                       <p key={idx} className="leading-relaxed">
                         {paragraph.split('\n').map((line, lIdx) => {
-                          // Format bold text
                           const parts = line.split(/(\*\*.*?\*\*)/g);
                           return (
                             <span key={lIdx} className="block">
                               {parts.map((p, pIdx) => {
                                 if (p.startsWith('**') && p.endsWith('**')) {
                                   return (
-                                    <strong key={pIdx} className={isUser ? 'text-amber-300 font-bold' : 'text-slate-950 font-bold'}>
+                                    <strong 
+                                      key={pIdx} 
+                                      className={isUser ? 'text-slate-950 font-black' : 'text-amber-300 font-bold'}
+                                    >
                                       {p.slice(2, -2)}
                                     </strong>
                                   );
@@ -480,9 +485,9 @@ export default function AiChatbotModal({
                     ))}
                   </div>
 
-                  {/* Action link button if attached */}
+                  {/* Direct Action Link / Navigation Button */}
                   {msg.actionLink && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                    <div className="mt-3.5 pt-3 border-t border-slate-800 flex items-center justify-between">
                       <button
                         onClick={() => {
                           if (onNavigateView && msg.actionLink?.view) {
@@ -490,66 +495,69 @@ export default function AiChatbotModal({
                             onClose();
                           }
                         }}
-                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
                       >
                         <span>{msg.actionLink.icon || '👉'}</span>
                         <span>{msg.actionLink.label}</span>
-                        <ArrowRight className="w-3 h-3" />
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
 
-                  {/* Tool actions on bot message (Audio reader & Copy) */}
+                  {/* Utility bar for Bot Message: Audio speech & Copy to clipboard */}
                   {!isUser && (
-                    <div className="mt-2.5 pt-2 border-t border-slate-100/80 flex items-center justify-between text-[10px] text-slate-400">
+                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[10.5px] text-slate-400">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => speakText(msg.text, msg.id)}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded-lg transition-colors cursor-pointer ${
-                            speakingMsgId === msg.id ? 'bg-amber-100 text-amber-900 font-bold' : 'hover:text-slate-700'
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                            speakingMsgId === msg.id 
+                              ? 'bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30' 
+                              : 'hover:text-slate-200 hover:bg-slate-800'
                           }`}
                           title="Ouvir Resposta por Áudio"
                         >
-                          <Volume2 className="w-3 h-3" />
-                          <span>{speakingMsgId === msg.id ? 'A falar...' : 'Ouvir'}</span>
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>{speakingMsgId === msg.id ? 'A reproduzir áudio...' : 'Ouvir'}</span>
                         </button>
 
                         <button
                           onClick={() => copyToClipboard(msg.text, msg.id)}
-                          className="flex items-center gap-1 hover:text-slate-700 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+                          className="flex items-center gap-1.5 hover:text-slate-200 hover:bg-slate-800 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                           title="Copiar Resposta"
                         >
                           {copiedId === msg.id ? (
                             <>
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              <span className="text-emerald-600 font-bold">Copiado</span>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400 font-bold">Copiado</span>
                             </>
                           ) : (
                             <>
-                              <Copy className="w-3 h-3" />
+                              <Copy className="w-3.5 h-3.5" />
                               <span>Copiar</span>
                             </>
                           )}
                         </button>
                       </div>
 
-                      <span className="text-[8.5px] text-slate-350 font-mono">
+                      <span className="text-[9px] text-slate-500 font-mono hidden sm:inline">
                         Mediador Cabinda 24/7
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Suggested follow-up questions */}
+                {/* Follow-up Suggested Question Chips */}
                 {!isUser && msg.suggestedQuestions && msg.suggestedQuestions.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1 pl-1 max-w-[95%]">
+                  <div className="flex flex-wrap gap-1.5 pt-1.5 pl-1 max-w-[95%]">
                     {msg.suggestedQuestions.map((sug, sIdx) => (
                       <button
                         key={sIdx}
                         onClick={() => handleSendMessage(sug)}
-                        className="px-2.5 py-1 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-900 text-[10px] font-bold rounded-xl border border-slate-200 hover:border-amber-300 transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                        className="px-3 py-1.5 bg-slate-900/90 hover:bg-amber-400 hover:text-slate-950 text-slate-300 text-[11px] font-semibold rounded-xl border border-slate-800 hover:border-amber-400 transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
                       >
-                        <span>💬</span> {sug}
+                        <span className="text-amber-400 group-hover:text-slate-950">💬</span> 
+                        <span>{sug}</span>
                       </button>
                     ))}
                   </div>
@@ -560,19 +568,19 @@ export default function AiChatbotModal({
 
           {/* Typing Indicator */}
           {isLoading && (
-            <div className="flex items-center gap-2 p-3 bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs w-28 text-slate-400 text-xs shadow-xs animate-pulse">
-              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></span>
-              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-              <span className="text-[10px] font-bold text-slate-500 ml-1">A pensar...</span>
+            <div className="flex items-center gap-2.5 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl rounded-tl-xs w-44 text-slate-300 text-xs shadow-md animate-pulse">
+              <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"></span>
+              <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+              <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+              <span className="text-[11px] font-bold text-amber-300 ml-1 font-mono">A pensar...</span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* INPUT FORM */}
-        <div className="p-3 bg-white border-t border-slate-100 shrink-0 space-y-2">
+        {/* INPUT FORM DOCK */}
+        <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800/90 shrink-0 space-y-2 relative z-10">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -584,14 +592,14 @@ export default function AiChatbotModal({
             <button
               type="button"
               onClick={handleVoiceInput}
-              title="Falar por voz"
-              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+              title={isListeningVoice ? 'A escutar... Fale agora' : 'Falar por comando de voz'}
+              className={`p-3 rounded-2xl border transition-all cursor-pointer shrink-0 ${
                 isListeningVoice
-                  ? 'bg-red-500 border-red-600 text-white animate-pulse'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                  ? 'bg-red-500 border-red-400 text-white animate-pulse shadow-lg shadow-red-500/30'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-750 hover:border-amber-400'
               }`}
             >
-              <Mic className="w-4 h-4" />
+              <Mic className="w-4.5 h-4.5" />
             </button>
 
             <input
@@ -599,18 +607,18 @@ export default function AiChatbotModal({
               type="text"
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              placeholder="Escreva a sua dúvida sobre encomendas, prazos, taxas..."
-              className="flex-1 p-2.5 px-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all"
+              placeholder="Escreva a sua dúvida sobre encomendas, frete, prazos, taxas..."
+              className="flex-1 p-3 px-4 bg-slate-900 border border-slate-750 rounded-2xl text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:bg-slate-850 focus:outline-hidden focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all font-medium"
               disabled={isLoading}
             />
 
             <button
               type="submit"
               disabled={!inputQuery.trim() || isLoading}
-              className={`p-2.5 px-3.5 rounded-xl font-bold transition-all flex items-center gap-1.5 text-xs cursor-pointer shadow-xs ${
+              className={`p-3 px-4.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-xs sm:text-sm cursor-pointer shadow-md shrink-0 ${
                 inputQuery.trim() && !isLoading
-                  ? 'bg-amber-400 hover:bg-amber-500 text-slate-950 font-black active:scale-95'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black active:scale-95 shadow-amber-400/20'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
               }`}
             >
               <Send className="w-4 h-4" />
@@ -618,22 +626,22 @@ export default function AiChatbotModal({
             </button>
           </form>
 
-          {/* Bottom Help and Escalation Bar */}
-          <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 pt-1">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+          {/* Bottom Security Assurance & Escalation Link */}
+          <div className="flex items-center justify-between text-[10.5px] text-slate-400 px-1 pt-1">
+            <span className="flex items-center gap-1.5 text-slate-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
               Respostas baseadas nas políticas oficiais de Cabinda
             </span>
 
             {botSettings.allowWhatsAppEscalation && (
               <a
-                href={`https://wa.me/${botSettings.whatsAppNumber.replace(/\+/g, '')}?text=Ol%C3%A1%2C+preciso+de+ajuda+com+o+Mediador+Cabinda`}
+                href={`https://wa.me/${botSettings.whatsAppNumber.replace(/\+/g, '')}?text=Ol%C3%A1%2C+estou+no+aplicativo+Mediador-Cabinda+e+preciso+de+ajuda`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-emerald-700 hover:text-emerald-800 font-extrabold flex items-center gap-1 hover:underline cursor-pointer"
+                className="text-emerald-400 hover:text-emerald-300 font-extrabold flex items-center gap-1 hover:underline cursor-pointer"
               >
-                <span>Falar no WhatsApp</span>
-                <ExternalLink className="w-2.5 h-2.5" />
+                <span>Falar com Atendente no WhatsApp</span>
+                <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>

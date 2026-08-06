@@ -13,6 +13,46 @@
   --color-primary-900: #0c4a6e;
 }
 
+/* Custom Chatbot & Floating Animations */
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px -3px rgba(245, 158, 11, 0.4), 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px 3px rgba(245, 158, 11, 0.65), 0 12px 30px -5px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@keyframes balloonBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-float-gentle {
+  animation: floatGentle 3.6s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 2.8s ease-in-out infinite;
+}
+
+.animate-balloon-bounce {
+  animation: balloonBounce 3s ease-in-out infinite;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #f8fafc;

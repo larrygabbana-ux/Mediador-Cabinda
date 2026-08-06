@@ -244,6 +244,25 @@ export default function ClientDashboard({
     availableFromDate?: string;
   } | null>(null);
 
+  // Product Code Getter Helper
+  const getProductCode = (prod: SupplierProduct) => {
+    if (prod.productCode) return prod.productCode;
+    if (prod.id && prod.id.startsWith('sprod-')) {
+      const num = parseInt(prod.id.replace('sprod-', ''), 10);
+      return `PRD-${1000 + (isNaN(num) ? 1 : num)}`;
+    }
+    if (prod.id && prod.id.startsWith('PRD-')) return prod.id;
+    return `PRD-${(prod.id || '1001').slice(-4).toUpperCase()}`;
+  };
+
+  // Direct Buy (Compra Direta Imediata) States
+  const [isDirectBuyMode, setIsDirectBuyMode] = useState(false);
+  const [directBuyQty, setDirectBuyQty] = useState(1);
+  const [directBuyDelivery, setDirectBuyDelivery] = useState<'escritorio' | 'domicilio'>('escritorio');
+  const [directBuyAddress, setDirectBuyAddress] = useState('');
+  const [directBuyNotes, setDirectBuyNotes] = useState('');
+  const [directBuySuccessOrder, setDirectBuySuccessOrder] = useState<Order | null>(null);
+
   // States for sending intermediate messages to suppliers
   const [selectedSupplierForMessage, setSelectedSupplierForMessage] = useState<Supplier | null>(null);
   const [showSupplierMessageModal, setShowSupplierMessageModal] = useState(false);
@@ -1071,9 +1090,17 @@ export default function ClientDashboard({
                         </div>
 
                         {/* Description Context */}
-                        <div className="p-3 flex-1 flex flex-col justify-between space-y-1 text-xs">
+                        <div className="p-3 flex-1 flex flex-col justify-between space-y-2 text-xs">
                           <div>
-                            <h4 className="font-extrabold text-[11px] text-slate-900 group-hover:text-amber-550 transition-colors line-clamp-2 leading-tight">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                              <span className="bg-amber-100/90 text-amber-900 text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded-md border border-amber-200/80 shadow-2xs">
+                                🏷️ {getProductCode(prod)}
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-bold truncate">
+                                📍 {prod.location || 'Luanda'}
+                              </span>
+                            </div>
+                            <h4 className="font-extrabold text-[11px] text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-2 leading-tight">
                               {prod.name}
                             </h4>
                             <p className="text-[10px] text-slate-400 font-medium truncate mt-1">
@@ -1081,7 +1108,7 @@ export default function ClientDashboard({
                             </p>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                             <div>
                               <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block">Preço</span>
                               <span className="font-mono text-xs font-black text-slate-900">
@@ -1089,9 +1116,9 @@ export default function ClientDashboard({
                               </span>
                             </div>
 
-                            <div className="w-6 h-6 bg-slate-50 group-hover:bg-amber-100 rounded-lg flex items-center justify-center transition-all">
-                              <ChevronRight className="w-3 text-slate-600 group-hover:translate-x-0.5 transition-transform" />
-                            </div>
+                            <span className="text-[9px] font-black text-amber-900 bg-amber-200/90 group-hover:bg-amber-400 px-2 py-1 rounded-lg transition-colors flex items-center gap-0.5 shadow-2xs">
+                              Opções ⚡
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -2244,19 +2271,21 @@ export default function ClientDashboard({
                           <div className="bg-slate-50 border p-4 rounded-xl">
                             {paymentMethod === 'multicaixa' ? (
                               <div className="space-y-2">
-                                <p className="text-slate-500 font-semibold text-[11px]">Introduza o nº de telemóvel associado à sua conta Multicaixa Express:</p>
+                                <p className="text-slate-500 font-semibold text-[11px]">Introduza o nº de telemóvel associado à sua conta Multicaixa Express (ex: 942043293):</p>
                                 <input 
                                   type="text" 
                                   value={mcExpressPhone}
                                   onChange={(e) => setMcExpressPhone(e.target.value)}
-                                  placeholder="923 000 000" 
+                                  placeholder="942 043 293" 
                                   className="w-full p-2 border bg-white rounded-lg font-mono text-xs" 
                                 />
                               </div>
                             ) : paymentMethod === 'transferencia' ? (
                               <div className="space-y-1">
-                                <p className="text-slate-500 text-[11px]">Transfira o total para a conta oficial do Mediador Cabinda Lda:</p>
-                                <p className="font-mono text-xs bg-white p-2 rounded-lg border"><strong>IBAN BAI Angola:</strong> AO06 0040 0000 7711 9289 1014 9</p>
+                                <p className="text-slate-500 text-[11px]">Transfira o total para a conta oficial do Mediador Cabinda:</p>
+                                <p className="font-mono text-xs bg-white p-2.5 rounded-lg border text-slate-800">
+                                  <strong>IBAN Oficial:</strong> AO06 0006 0000 01307638301 95
+                                </p>
                               </div>
                             ) : (
                               <div className="space-y-1">
@@ -3318,18 +3347,29 @@ export default function ClientDashboard({
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-1">
-                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">🏢 Balcão & Armazém Cabinda</span>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-2">
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">🏢 Direção Base & Balcão Cabinda</span>
                 <p className="font-bold text-slate-900">Armazém C-4, Recinto do Porto Comercial</p>
                 <p className="text-slate-500 text-[11px]">Rua Direita, Província de Cabinda, Angola</p>
-                <p className="text-amber-800 font-mono text-[11px] font-bold pt-1">Atendimento: Seg-Sex 08h-18h | Sáb 08h-13h</p>
+                <p className="text-amber-800 font-mono text-[11px] font-bold">Atendimento: Seg-Sex 08h-18h | Sáb 08h-13h</p>
+                <div className="pt-2 border-t border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                  <p>👤 <strong>Criador:</strong> João Hilário António</p>
+                  <p>📍 <strong>Direção Base:</strong> Cabinda</p>
+                  <p className="text-[10px] text-amber-700 font-bold">🚀 Mediando entre Cabinda e Luanda e em breve para as demais províncias de Angola...</p>
+                </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-1">
-                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">🏭 Armazém de Estiva Luanda</span>
-                <p className="font-bold text-slate-900">Parque Logístico Portuário / Viana</p>
-                <p className="text-slate-500 text-[11px]">Luanda, Angola</p>
-                <p className="text-slate-600 text-[11px] font-bold pt-1">WhatsApp Geral: +244 942 043 293 / +244 945 888 777</p>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-2">
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">📞 Linhas Telefónicas & Pagamentos</span>
+                <div className="space-y-1 text-[11px] text-slate-700">
+                  <p>📱 <strong>Unitel:</strong> <a href="tel:+244942043293" className="text-sky-600 hover:underline font-bold">942 043 293</a></p>
+                  <p>📱 <strong>Movicel:</strong> <a href="tel:+244998100940" className="text-sky-600 hover:underline font-bold">998 100 940</a></p>
+                  <p>💳 <strong>Multicaixa Express:</strong> <span className="font-mono font-bold text-slate-900">942 043 293</span></p>
+                  <p>✉️ <strong>E-mail:</strong> <a href="mailto:equipemediadorcabindacabinda@gmail.com" className="text-sky-600 hover:underline font-bold">equipemediadorcabindacabinda@gmail.com</a></p>
+                  <p className="font-mono text-[10px] bg-white p-1.5 rounded-lg border border-slate-200 mt-1">
+                    <strong>IBAN:</strong> AO06 0006 0000 01307638301 95
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -4333,139 +4373,476 @@ export default function ClientDashboard({
         </div>
       )}
 
-      {/* 🔮 INTER-COMMERCE PRODUCT DETAIL MODAL OVERLAY */}
+      {/* 🔮 INTER-COMMERCE PRODUCT DETAIL & DIRECT BUY MODAL OVERLAY */}
       {selectedProduct && (() => {
         const sup = suppliers.find(s => s.id === selectedProduct.supplierId);
         const isEsgotado = selectedProduct.availability === 'esgotado' || selectedProduct.stock === 0;
+        const prodCode = getProductCode(selectedProduct);
+        const itemSubtotal = selectedProduct.price * directBuyQty;
+        const freightEst = 12000 * directBuyQty;
+        const dispatchEst = 8000;
+        const commEst = Math.round(itemSubtotal * 0.12);
+        const deliveryFee = directBuyDelivery === 'domicilio' ? 5000 : 0;
+        const grandTotalEst = itemSubtotal + freightEst + dispatchEst + commEst + deliveryFee;
+
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-fade-in" id="product-detail-modal-overlay">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in" id="product-detail-modal-overlay">
             <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full border border-slate-150 overflow-hidden animate-scale-up text-slate-800 flex flex-col max-h-[90vh]">
               {/* Header */}
               <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-amber-500 text-lg">🛍️</span>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhes do Artigo</span>
+                  <span className="text-amber-500 text-lg">{isDirectBuyMode ? '⚡' : '🛍️'}</span>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      {isDirectBuyMode ? 'Solicitação de Compra Direta' : 'Detalhes do Artigo Homologado'}
+                    </span>
+                    <span className="text-xs font-mono font-black text-amber-800 flex items-center gap-1">
+                      🏷️ Código: {prodCode}
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedProduct(null)}
-                  className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-150 rounded-lg transition-all cursor-pointer"
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setIsDirectBuyMode(false);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/80 rounded-xl transition-all cursor-pointer"
+                  title="Fechar"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Scrollable details */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-none">
-                {/* Photo & Badge */}
-                <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-150 bg-slate-50 shrink-0">
-                  {selectedProduct.photoUrl ? (
-                    <img 
-                      src={selectedProduct.photoUrl} 
-                      alt={selectedProduct.name} 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold">
-                      Sem Foto Disponível
+              {/* Scrollable details / Direct Buy Flow */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 scrollbar-none">
+                {!isDirectBuyMode ? (
+                  <>
+                    {/* Photo & Badge */}
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-150 bg-slate-50 shrink-0">
+                      {selectedProduct.photoUrl ? (
+                        <img 
+                          src={selectedProduct.photoUrl} 
+                          alt={selectedProduct.name} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold">
+                          Sem Foto Disponível
+                        </div>
+                      )}
+
+                      {/* Product Identity Watermark Tag */}
+                      <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-xs text-white font-mono font-black text-[10px] px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5">
+                        <span>🏷️ CÓDIGO:</span>
+                        <span className="text-amber-400">{prodCode}</span>
+                      </div>
+
+                      {selectedProduct.sponsored && (
+                        <span className="absolute top-3 left-3 bg-amber-400 text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                          Destaque Homologado
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  {selectedProduct.sponsored && (
-                    <span className="absolute top-3 left-3 bg-amber-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                      Destaque Homologado
-                    </span>
-                  )}
-                </div>
+                    {/* Main details */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-base font-black text-slate-900 tracking-tight font-sans leading-snug">
+                          {selectedProduct.name}
+                        </h3>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-bold text-slate-500">
+                        <span className="flex items-center gap-1 text-slate-700">🏷️ SKU: <strong>{prodCode}</strong></span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">📍 Origem: <strong>{selectedProduct.location || 'Luanda'}</strong></span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">📅 Disp.: <strong>{selectedProduct.availableFromDate || 'Imediata (Hoje)'}</strong></span>
+                        <span>•</span>
+                        <span>Fornecedor: <strong>{sup?.name || 'Distribuidor Parceiro'}</strong></span>
+                        <span>•</span>
+                        <span className={`px-2 py-0.5 rounded-full font-black ${
+                          isEsgotado ? 'bg-red-50 text-red-650' : selectedProduct.availability === 'sob-pedido' ? 'bg-blue-50 text-blue-750' : 'bg-emerald-50 text-emerald-800'
+                        }`}>
+                          {isEsgotado ? 'Esgotado' : selectedProduct.availability === 'sob-pedido' ? 'Sob Pedido' : 'Disponível em Stock'}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* Main details */}
-                <div className="space-y-2">
-                  <h3 className="text-base font-black text-slate-900 tracking-tight font-sans leading-snug">
-                    {selectedProduct.name}
-                  </h3>
-                  
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-bold text-slate-500">
-                    <span className="flex items-center gap-1">📍 Origem: {selectedProduct.location || 'Luanda'}</span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">📅 Disp.: {selectedProduct.availableFromDate || 'Imediata (Hoje)'}</span>
-                    <span>•</span>
-                    <span>Empresa de Stock: {sup?.name || 'Distribuidor Parceiro'}</span>
-                    <span>•</span>
-                    <span className={`px-2 py-0.5 rounded-full font-black ${
-                      isEsgotado ? 'bg-red-50 text-red-650' : selectedProduct.availability === 'sob-pedido' ? 'bg-blue-50 text-blue-750' : 'bg-emerald-50 text-emerald-800'
-                    }`}>
-                      {isEsgotado ? 'Esgotado' : selectedProduct.availability === 'sob-pedido' ? 'Sob Pedido' : 'Disponível em Stock'}
-                    </span>
-                  </div>
-                </div>
+                    {/* Price block */}
+                    <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Preço de Compra Intermediado</span>
+                        <span className="font-mono text-lg font-black text-slate-900 tracking-tight block">
+                          {selectedProduct.price.toLocaleString('pt-AO')} Kz
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200 px-3 py-1 rounded-full border border-amber-300">
+                        Com Despacho & Alfândega
+                      </span>
+                    </div>
 
-                {/* Price block */}
-                <div className="p-4 bg-amber-50/10 rounded-2xl border border-amber-50 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">Preço de Compra Intermediado</span>
-                    <span className="font-mono text-lg font-black text-slate-900 tracking-tight block">
-                      {selectedProduct.price.toLocaleString('pt-AO')} Kz
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-extrabold text-amber-850 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
-                    Com Despacho & Alfândega
-                  </span>
-                </div>
+                    {/* Specifications & description */}
+                    <div className="space-y-2.5">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Especificações & Qualidade Técnica</h4>
+                      <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl text-xs font-semibold leading-relaxed text-slate-600 space-y-1">
+                        <p>{selectedProduct.description || 'Produto homologado de alta qualidade técnica e robustez, testado pela equipa alfandegária.'}</p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 mt-3 border-t border-slate-200/60 text-[10px] font-bold text-slate-500">
+                          <p>📋 Estado: <span className="text-slate-800">Novo em Caixa</span></p>
+                          <p>📦 Stock Físico: <span className="text-slate-800">{isEsgotado ? 'Sem stock' : `${selectedProduct.stock} unidades`}</span></p>
+                          <p>🏷️ Cód. Identidade: <span className="font-mono text-amber-700 font-black">{prodCode}</span></p>
+                          <p>🛡️ Garantia: <span className="text-slate-800">Intermediação Mediador</span></p>
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Specifications & description */}
-                <div className="space-y-2.5">
-                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Especificações & Qualidade Técnica</h4>
-                  <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl text-xs font-semibold leading-relaxed text-slate-600 space-y-1">
-                    <p>{selectedProduct.description || 'Produto homologado de alta qualidade técnica e robustez, testado pela equipa alfandegária.'}</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 mt-3 border-t border-slate-200/60 text-[10px] font-bold text-slate-500">
-                      <p>📋 Estado: <span className="text-slate-800">Novo em Caixa</span></p>
-                      <p>📦 Stock Físico: <span className="text-slate-800">{isEsgotado ? 'Sem stock' : `${selectedProduct.stock} unidades`}</span></p>
-                      <p>🛡️ Garantia: <span className="text-slate-800">Intermediação Mediador</span></p>
-                      <p>⚓ Tipo de Frete: <span className="text-slate-800">Aéreo ou Marítimo</span></p>
+                    {/* Protection warning */}
+                    <div className="bg-sky-50 border border-sky-100 p-3.5 rounded-2xl text-[10px] text-sky-800 flex items-start gap-2 leading-relaxed font-bold">
+                      <span>⚓</span>
+                      <p>Por motivos de faturamento legal e proteção contra burlas comerciais, a compra é integralmente mediada pela equipa do <strong>Mediador Cabinda</strong>. Nós compramos e fazemos a entrega.</p>
+                    </div>
+                  </>
+                ) : (
+                  /* DIRECT BUY QUICK FORM */
+                  <div className="space-y-4 animate-fade-in">
+                    {/* Selected product bar */}
+                    <div className="bg-amber-500/10 border border-amber-200 p-3 rounded-2xl flex items-center gap-3">
+                      <img 
+                        src={selectedProduct.photoUrl} 
+                        alt={selectedProduct.name} 
+                        className="w-14 h-14 rounded-xl object-cover border border-amber-200 bg-white shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="overflow-hidden flex-1">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="font-mono text-[9px] font-black text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded-md">
+                            {prodCode}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold">📍 {selectedProduct.location || 'Luanda'}</span>
+                        </div>
+                        <h4 className="font-bold text-xs text-slate-900 truncate">{selectedProduct.name}</h4>
+                        <p className="font-mono text-xs font-black text-slate-900 mt-0.5">
+                          {selectedProduct.price.toLocaleString('pt-AO')} AOA / unid.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quantity Picker */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Quantidade Pretendida</span>
+                        <span className="text-[10px] text-slate-500">Stock disponível: {selectedProduct.stock || 10} unid.</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDirectBuyQty(prev => Math.max(1, prev - 1))}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-250 text-slate-800 font-black text-sm flex items-center justify-center hover:bg-slate-100 cursor-pointer shadow-2xs"
+                        >
+                          -
+                        </button>
+                        <span className="font-mono font-black text-sm w-6 text-center text-slate-900">
+                          {directBuyQty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDirectBuyQty(prev => prev + 1)}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-250 text-slate-800 font-black text-sm flex items-center justify-center hover:bg-slate-100 cursor-pointer shadow-2xs"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Delivery Mode */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                        Modalidade de Entrega em Cabinda
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDirectBuyDelivery('escritorio')}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                            directBuyDelivery === 'escritorio'
+                              ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-xs block">🏢 Balcão Porto Cabinda</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">Armazém C-4 (Sem custo extra)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDirectBuyDelivery('domicilio')}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                            directBuyDelivery === 'domicilio'
+                              ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-xs block">🚚 Entrega ao Domicílio</span>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">+5.000 AOA em Cabinda</span>
+                        </button>
+                      </div>
+
+                      {directBuyDelivery === 'domicilio' && (
+                        <div className="pt-1">
+                          <input
+                            type="text"
+                            value={directBuyAddress}
+                            onChange={e => setDirectBuyAddress(e.target.value)}
+                            placeholder="Indique o Bairro, Rua e Ponto de Referência em Cabinda..."
+                            className="w-full text-xs p-2.5 bg-white border border-slate-250 rounded-xl focus:border-amber-400 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                        Instruções ou Observações (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={directBuyNotes}
+                        onChange={e => setDirectBuyNotes(e.target.value)}
+                        placeholder="Ex: Por favor confirmar se inclui cabos/acessórios, cor preta..."
+                        className="w-full text-xs p-2.5 bg-white border border-slate-250 rounded-xl focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Estimated Cost Breakdown */}
+                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-1.5 text-xs font-semibold text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Valor dos Artigos ({directBuyQty}x):</span>
+                        <span className="font-mono text-slate-900 font-bold">{itemSubtotal.toLocaleString('pt-AO')} Kz</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>Estimativa de Frete Luanda ➔ Cabinda:</span>
+                        <span className="font-mono">{freightEst.toLocaleString('pt-AO')} Kz</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>Despacho Aduaneiro & Guia de Cabotagem:</span>
+                        <span className="font-mono">{dispatchEst.toLocaleString('pt-AO')} Kz</span>
+                      </div>
+                      {directBuyDelivery === 'domicilio' && (
+                        <div className="flex justify-between text-[11px] text-slate-500">
+                          <span>Taxa de Entrega ao Domicílio:</span>
+                          <span className="font-mono">5.000 Kz</span>
+                        </div>
+                      )}
+                      <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                        <span className="font-bold text-slate-900">Total Estimado da Operação:</span>
+                        <span className="font-mono text-sm font-black text-amber-700">
+                          {grandTotalEst.toLocaleString('pt-AO')} Kz
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-[10px] text-emerald-900 font-bold flex items-start gap-2">
+                      <span>✓</span>
+                      <p>Sem pagamento imediato obrigatório. A nossa equipa entrará em contacto para confirmar o artigo, validar a fatura comercial e emitir a fatura pro-forma oficial.</p>
                     </div>
                   </div>
-                </div>
-
-                {/* Protection warning */}
-                <div className="bg-sky-50 border border-sky-100 p-4 rounded-2xl text-[10px] text-sky-800 flex items-start gap-2 leading-relaxed font-bold">
-                  <span>⚓</span>
-                  <p>Por motivos de faturamento legal e proteção contra burlas comerciais, a compra é integralmente mediada pela equipa do <strong>Mediador Cabinda</strong>. Nós compramos e fazemos a entrega.</p>
-                </div>
+                )}
               </div>
 
-              {/* CTAs */}
+              {/* 3 ACTION BUTTONS (CATALOG / CHAT / DIRECT BUY) */}
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProduct(null)}
-                  className="w-full sm:w-auto px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all h-11 shrink-0 cursor-pointer"
-                >
-                  Voltar ao Catálogo
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => {
-                    const originLoc = selectedProduct.location || 'Luanda';
-                    const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo "${selectedProduct.name}" anunciado pelo parceiro de ${originLoc}. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${selectedProduct.price.toLocaleString('pt-AO')} AOA.`;
+                {!isDirectBuyMode ? (
+                  <>
+                    {/* Opção 1: Voltar ao Catálogo */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProduct(null)}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all h-11 shrink-0 cursor-pointer"
+                    >
+                      Voltar ao Catálogo
+                    </button>
                     
-                    localStorage.setItem('mediador_prefilled_product_message', inquiryMsg);
-                    localStorage.setItem('mediador_active_channel', 'general');
-                    
-                    setSelectedProduct(null);
-                    setCurrentView('mensagens');
-                    speak(`Iniciando chat operacional de intermediação para ${selectedProduct.name}`);
-                  }}
-                  className="flex-1 px-5 py-2 bg-amber-400 hover:bg-amber-500 active:scale-98 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 h-11 cursor-pointer shadow-xs font-display uppercase tracking-wider"
-                >
-                  <span>💬</span> Consultar Vendedor (Mediador)
-                </button>
+                    {/* Opção 2: Consultar Vendedor (Chat & IA) com Código e Foto */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const originLoc = selectedProduct.location || 'Luanda';
+                        const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo [CÓDIGO: ${prodCode}] "${selectedProduct.name}" anunciado pelo parceiro de ${originLoc}. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${selectedProduct.price.toLocaleString('pt-AO')} AOA.`;
+                        
+                        localStorage.setItem('mediador_prefilled_product_message', inquiryMsg);
+                        localStorage.setItem('mediador_active_channel', 'general');
+                        
+                        setSelectedProduct(null);
+                        setCurrentView('mensagens');
+                        speak(`Iniciando chat operacional de intermediação para o artigo código ${prodCode}`);
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 h-11 cursor-pointer shadow-xs"
+                    >
+                      <span>💬</span> Consultar Vendedor
+                    </button>
+
+                    {/* Opção 3: Fazer Compra Direta / Solicitar Aquisição Imediata */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDirectBuyMode(true);
+                        speak(`Preparando compra direta para o artigo ${selectedProduct.name}`);
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-amber-400 hover:bg-amber-500 active:scale-98 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 h-11 cursor-pointer shadow-md font-display uppercase tracking-wider"
+                    >
+                      <span>⚡</span> Fazer Compra Direta
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setIsDirectBuyMode(false)}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all h-11 shrink-0 cursor-pointer"
+                    >
+                      ← Voltar aos Detalhes
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newOrderId = `MED-${Math.floor(1000 + Math.random() * 9000)}`;
+                        const newOrder: Order = {
+                          id: newOrderId,
+                          clientId: activeClientId,
+                          clientName: client?.name || 'Cliente Cabinda',
+                          clientPhone: client?.phone || '+244 923 000 000',
+                          productId: selectedProduct.id,
+                          productCode: prodCode,
+                          productName: selectedProduct.name,
+                          quantity: directBuyQty,
+                          supplierName: sup?.name || 'Fornecedor Homologado',
+                          supplierPhone: sup?.phoneHidden || '+244 924 111 222',
+                          supplierLocation: selectedProduct.location || 'Luanda',
+                          productPhotoUrl: selectedProduct.photoUrl,
+                          notes: directBuyNotes ? `[Compra Direta SKU: ${prodCode}] ${directBuyNotes}` : `Compra Direta do artigo ${prodCode} - ${selectedProduct.name}`,
+                          budgetRawPrice: itemSubtotal,
+                          budgetShipping: freightEst,
+                          dispatchFee: dispatchEst,
+                          commissionRate: 0.12,
+                          commissionAmount: commEst,
+                          totalAmount: grandTotalEst,
+                          paid: false,
+                          deliveryOption: directBuyDelivery,
+                          deliveryAddress: directBuyDelivery === 'domicilio' ? (directBuyAddress || 'Cabinda') : 'Balcão Armazém C-4, Porto Comercial de Cabinda',
+                          status: 'RECEBIDO',
+                          pointsEarned: Math.round(itemSubtotal / 1000),
+                          createdAt: new Date().toISOString()
+                        };
+
+                        onAddOrder(newOrder);
+                        speak(`Solicitação de compra direta do artigo ${selectedProduct.name} registada com sucesso!`);
+                        setSelectedProduct(null);
+                        setIsDirectBuyMode(false);
+                        setDirectBuySuccessOrder(newOrder);
+                      }}
+                      className="flex-1 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 h-11 cursor-pointer shadow-md font-display uppercase tracking-wider"
+                    >
+                      <span>🚀</span> Confirmar e Enviar Pedido
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* 🎉 DIRECT BUY SUCCESS CELEBRATION MODAL */}
+      {directBuySuccessOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in" id="direct-buy-success-modal">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-up text-slate-800 flex flex-col">
+            {/* Celebration Header */}
+            <div className="p-5 bg-linear-to-r from-emerald-600 to-teal-700 text-white text-center relative">
+              <span className="text-3xl block mb-1">🎉</span>
+              <h3 className="font-extrabold text-base font-display">Solicitação de Compra Recebida!</h3>
+              <p className="text-[11px] text-emerald-100 font-medium mt-0.5">
+                A nossa equipa em Luanda e Cabinda foi notificada para dar início à validação.
+              </p>
+            </div>
+
+            {/* Content summary */}
+            <div className="p-5 space-y-4">
+              {/* Product mini card */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex items-center gap-3">
+                {directBuySuccessOrder.productPhotoUrl && (
+                  <img 
+                    src={directBuySuccessOrder.productPhotoUrl} 
+                    alt={directBuySuccessOrder.productName} 
+                    className="w-14 h-14 rounded-xl object-cover border border-slate-200 bg-white shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+                <div className="overflow-hidden flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                    <span className="font-mono text-[9px] font-black text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded-md">
+                      🏷️ {directBuySuccessOrder.productCode || 'PRD-1001'}
+                    </span>
+                    <span className="font-mono text-[9px] font-bold text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded-md">
+                      📦 {directBuySuccessOrder.id}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-900 truncate">{directBuySuccessOrder.productName}</h4>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                    Qtd: {directBuySuccessOrder.quantity} • Total Estimado: <strong className="text-slate-800 font-mono">{(directBuySuccessOrder.totalAmount || 0).toLocaleString('pt-AO')} Kz</strong>
+                  </p>
+                </div>
+              </div>
+
+              {/* Step info */}
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-[11px] text-amber-900 font-medium space-y-1">
+                <p className="font-bold">📋 Próximos Passos:</p>
+                <p>1. O Mediador contacta o distribuidor e faz a inspeção do artigo.</p>
+                <p>2. Emitimos a fatura pro-forma oficial com comprovativo aduaneiro.</p>
+                <p>3. Você acompanha o frete e levanta o artigo com garantia total!</p>
+              </div>
+
+              {/* Direct WhatsApp trigger button */}
+              <a
+                href={`https://wa.me/244942043293?text=${encodeURIComponent(
+                  `Olá Mediador Cabinda! Acabei de solicitar a compra direta do artigo [CÓDIGO: ${directBuySuccessOrder.productCode || 'PRD-1001'}] "${directBuySuccessOrder.productName}".\n\nNº do Pedido: ${directBuySuccessOrder.id}\nQuantidade: ${directBuySuccessOrder.quantity}\nCliente: ${client?.name || 'Cliente'} (${client?.phone || '+244 923 000 000'})\n\nPodem verificar a receção e avançar com o despacho?`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md uppercase tracking-wider"
+              >
+                <span>📱</span> Notificar Equipa no WhatsApp com Código ➔
+              </a>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setDirectBuySuccessOrder(null)}
+                className="w-full sm:w-auto px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Continuar no Catálogo
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOrderId(directBuySuccessOrder.id);
+                  setDirectBuySuccessOrder(null);
+                  setCurrentView('acompanhar-pedido');
+                }}
+                className="flex-1 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <span>🚚</span> Acompanhar Pedido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PERFECTLY CENTERED, DYNAMIC AND RESPONSIVE CLIENT MODAL DIALOG OVERLAY */}
       {customDialog && (
