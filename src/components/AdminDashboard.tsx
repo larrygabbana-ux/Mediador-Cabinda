@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from '../types';
+import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest, BotSettings } from '../types';
 import { CARRIER_COMPANIES } from '../data/mockData';
 import { 
   BarChart, 
@@ -34,10 +34,20 @@ import {
   Handshake,
   Coins,
   UserPlus,
-  Percent
+  Percent,
+  Bot,
+  Sparkles,
+  ToggleLeft,
+  ToggleRight,
+  Clock,
+  Settings as SettingsIcon,
+  HelpCircle,
+  Zap,
+  Shield
 } from 'lucide-react';
 import SharedChat from './SharedChat';
 import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
+import { KNOWLEDGE_BASE_ITEMS, POPULAR_QUESTIONS, solveBotQueryLocally } from '../utils/aiBotKnowledge';
 
 interface AdminDashboardProps {
   clients: Client[];
@@ -114,11 +124,39 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   
   // Navigation states
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'clients' | 'carriers' | 'complaints' | 'chat' | 'suppliers' | 'collaborators'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'clients' | 'carriers' | 'complaints' | 'chat' | 'suppliers' | 'collaborators' | 'chatbot'>('metrics');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orders[0]?.id || null);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderStatus | 'TODOS'>('TODOS');
   const [selectedColabId, setSelectedColabId] = useState<string | null>(null);
+
+  // 24/7 AI Bot Settings State for Management
+  const [adminBotSettings, setAdminBotSettings] = useState<BotSettings>(() => {
+    try {
+      const saved = localStorage.getItem('mediador_cabinda_bot_settings');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      enabled: true,
+      botName: 'Mano Mediador IA',
+      welcomeMessage: 'Olá! Sou o Assistente Virtual 24/7 do Mediador Cabinda. Posso esclarecer qualquer dúvida sobre encomendas, prazos marítimos/aéreos, pagamentos por Multicaixa Express ou IBAN e rastreio de cargas.',
+      offHoursMessage: 'Estamos no período noturno/fora de expediente, mas eu estou 100% online para ajudá-lo com respostas imediatas!',
+      autoReplyInSharedChat: true,
+      businessHoursStart: '08:00',
+      businessHoursEnd: '18:00',
+      allowWhatsAppEscalation: true,
+      whatsAppNumber: '+244942043293'
+    };
+  });
+  const [botKnowledgeSearch, setBotKnowledgeSearch] = useState('');
+  const [botSaveFeedback, setBotSaveFeedback] = useState(false);
+
+  const handleSaveBotSettings = (updated: BotSettings) => {
+    setAdminBotSettings(updated);
+    localStorage.setItem('mediador_cabinda_bot_settings', JSON.stringify(updated));
+    setBotSaveFeedback(true);
+    setTimeout(() => setBotSaveFeedback(false), 3000);
+  };
 
   // Collaborator and Sales Form State
   const [newColabForm, setNewColabForm] = useState({
@@ -512,6 +550,71 @@ export default function AdminDashboard({
     setUploadedReceiptName('');
   };
 
+  const handleGenerateAutoGuide = () => {
+    const autoCode = `GUI-CB-${Math.floor(100000 + Math.random() * 900000)}`;
+    setGuideNumber(autoCode);
+    showModalAlert('Guia de Carga Gerada', `Número de Guia Oficial da AGT gerado com sucesso: ${autoCode}`, 'info');
+  };
+
+  const handleShareTrackingMessage = (order: Order) => {
+    const trackingStepsTitles: Record<OrderStatus, string> = {
+      'RECEBIDO': '1. Pedido Registado no Sistema',
+      'ANALISE': '2. Em Análise Técnica & Cotação',
+      'ORCADO': '3. Orçamento Pronto para Aprovação',
+      'PAGO': '4. Pagamento Validado (Ordem de Compra Emitida)',
+      'COMPRADO': '5. Mercadoria Comprada em Luanda & Inspecionada',
+      'TRANSPORTE': '6. Carga em Trânsito (Cabotagem Marítima / Aérea)',
+      'CABINDA': '7. Carga Desembarcada no Porto de Cabinda',
+      'LEVANTAMENTO': '8. Disponível para Levantamento no Armazém C-4',
+      'ENTREGUE': '9. Encomenda Entregue com Sucesso!'
+    };
+
+    const statusLabel = trackingStepsTitles[order.status] || order.status;
+    const guideTxt = order.shippingGuideNumber ? order.shippingGuideNumber : 'A ser emitida no despacho aduaneiro';
+    const carrierTxt = order.shippingCarrier || 'Cabinda Cargas / Cabotagem Fluvial-Marítima';
+    const estimateTxt = order.estimateDeliveryDate || '3 a 5 dias úteis';
+
+    const message = `📦 *MEDIADOR CABINDA LDA - CÓDIGO DE RASTREIO OFICIAL*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👤 *Cliente:* ${order.clientName}
+🛍️ *Mercadoria:* ${order.productName} (Qtd: ${order.quantity})
+🔖 *Código de Rastreio:* *${order.id}*
+📄 *Guia de Trânsito AGT:* ${guideTxt}
+🚢 *Transportadora:* ${carrierTxt}
+📍 *Estado Atual:* *${statusLabel}*
+📅 *Previsão de Chegada:* ${estimateTxt}
+🏢 *Local de Levantamento:* Armazém C-4, Recinto do Porto de Cabinda
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 *Como Rastrear a Carga em Tempo Real:*
+1. Abra o aplicativo Mediador Cabinda
+2. No campo "Acompanhar Pedidos", insira o código: *${order.id}*
+3. Acompanhe as 9 etapas em tempo real e a posição do barco no mapa!
+💬 Dúvidas 24/7? Pergunte ao nosso Mano Mediador IA no app.
+
+_Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`;
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(message);
+    }
+
+    const cleanPhone = (order.clientPhone || '').replace(/\D/g, '');
+    if (cleanPhone) {
+      const whatsappUrl = `https://wa.me/${cleanPhone.startsWith('244') ? cleanPhone : '244' + cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      showModalAlert(
+        'Mensagem de Rastreio Gerada',
+        `O código de rastreio ${order.id} e a mensagem formatada foram copiados para a sua área de transferência e o WhatsApp foi aberto para o cliente ${order.clientName} (${order.clientPhone})!`,
+        'success'
+      );
+    } else {
+      showModalAlert(
+        'Mensagem de Rastreio Copiada',
+        `A mensagem com o código de rastreio ${order.id} foi copiada para a área de transferência! Pode colá-la no WhatsApp, SMS ou e-mail do cliente.\n\n${message}`,
+        'success'
+      );
+    }
+  };
+
   const handleDispatchCargo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeOrder) return;
@@ -679,7 +782,7 @@ export default function AdminDashboard({
       </div>
 
       {/* ADMIN NAVIGATION TABS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-white p-1.5 border border-slate-150 rounded-2xl gap-1.5 shadow-sm" id="admin-nav-tabs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 bg-white p-1.5 border border-slate-150 rounded-2xl gap-1.5 shadow-sm" id="admin-nav-tabs">
         <button
           onClick={() => setActiveTab('metrics')}
           className={`flex items-center justify-center gap-2 py-2.5 text-xs font-extrabold rounded-xl transition-all cursor-pointer ${
@@ -784,6 +887,21 @@ export default function AdminDashboard({
         >
           <Handshake className="w-4 h-4 shrink-0 text-amber-500" />
           <span className="truncate">Colaboradores</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('chatbot');
+            speak("Painel de controlo do Assistente Virtual IA 24 horas ativo.");
+          }}
+          className={`flex items-center justify-center gap-2 py-2.5 text-xs font-extrabold rounded-xl transition-all relative cursor-pointer ${
+            activeTab === 'chatbot' ? 'bg-slate-900 text-amber-400 font-bold shadow-xs' : 'text-slate-500 hover:bg-slate-50'
+          }`}
+          id="adm-tab-chatbot"
+        >
+          <Bot className="w-4 h-4 shrink-0 text-amber-500" />
+          <span className="truncate">Assistente IA</span>
+          <span className="bg-emerald-500 text-white text-[9px] px-1 py-0.2 rounded-full font-bold">24h</span>
         </button>
       </div>
 
@@ -1096,6 +1214,14 @@ export default function AdminDashboard({
                     <div className="mt-3 flex flex-col gap-1.5 justify-end">
                       <button
                         type="button"
+                        onClick={() => handleShareTrackingMessage(activeOrder)}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-xs"
+                        title="Partilhar código e link de rastreio formatado por WhatsApp ou copiar"
+                      >
+                        📲 Partilhar Rastreio (WhatsApp)
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setShowInvoiceModal(true)}
                         className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-800 rounded-lg text-[10px] font-black uppercase tracking-wide border border-sky-200 transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
                       >
@@ -1374,13 +1500,22 @@ export default function AdminDashboard({
                         </div>
 
                         <div>
-                          <label className="block font-bold text-slate-700 mb-1 font-semibold">Número da Guia de Carga (Guia Oficial)</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block font-bold text-slate-700 font-semibold">Número da Guia de Carga (Guia Oficial)</label>
+                            <button
+                              type="button"
+                              onClick={handleGenerateAutoGuide}
+                              className="text-[9.5px] bg-sky-50 text-sky-700 hover:bg-sky-100 font-black px-2 py-0.5 rounded-md border border-sky-200 cursor-pointer transition-colors"
+                            >
+                              ⚡ Gerar Guia AGT
+                            </button>
+                          </div>
                           <input
                             type="text"
                             value={guideNumber}
                             onChange={(e) => setGuideNumber(e.target.value)}
                             placeholder="Ex: GUI-CB-992144"
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden"
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden font-mono"
                             required
                           />
                         </div>
@@ -3943,6 +4078,337 @@ export default function AdminDashboard({
                 </tbody>
               </table>
             </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* CHATBOT 24/7 IA MANAGEMENT TAB */}
+      {activeTab === 'chatbot' && (
+        <div className="space-y-6 animate-fade-in" id="adm-chatbot-section">
+          
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 p-6 rounded-3xl text-white border border-slate-800 shadow-xl relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-96 h-96 bg-amber-400/10 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
+                    <Bot className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black font-display tracking-tight text-white flex items-center gap-2">
+                      Assistente Virtual IA 24/7
+                      <span className="text-[10px] bg-emerald-500 text-white font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        Ativo 24 Horas
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-300 font-medium">
+                      Atendimento inteligente ininterrupto para clientes do enclave de Cabinda e Luanda
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-2xl flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">Motor IA</span>
+                    <span className="text-xs font-black text-amber-300">Gemini 3.6 + Base Local</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Metrics Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Total Dúvidas 24/7</span>
+                <p className="text-lg font-black text-slate-900 font-display">1.482</p>
+                <span className="text-[9px] text-emerald-600 font-bold">+28% este mês</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Atendimento Noturno</span>
+                <p className="text-lg font-black text-slate-900 font-display">624</p>
+                <span className="text-[9px] text-slate-500 font-medium">Fora de expediente</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Tempo de Resposta</span>
+                <p className="text-lg font-black text-slate-900 font-display">Instantâneo</p>
+                <span className="text-[9px] text-blue-600 font-bold">0ms / local + nuvem</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400">Taxa de Resolução</span>
+                <p className="text-lg font-black text-slate-900 font-display">94,2%</p>
+                <span className="text-[9px] text-emerald-600 font-bold">Sem transbordo humano</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Main 2-Column Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Left Column: Bot Settings Form */}
+            <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-3xl border border-slate-150 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                <div className="flex items-center gap-2">
+                  <SettingsIcon className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-display">
+                    Parâmetros e Regras do Bot
+                  </h3>
+                </div>
+                {botSaveFeedback && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2.5 py-1 rounded-lg animate-pulse">
+                    ✓ Guardado com Sucesso!
+                  </span>
+                )}
+              </div>
+
+              {/* Bot Enabled Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <div>
+                  <span className="font-extrabold text-xs text-slate-900 block">Ativar Assistente Virtual IA</span>
+                  <span className="text-[10.5px] text-slate-500 font-medium">Disponibiliza o botão e modal 24/7 para todos os clientes</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveBotSettings({ ...adminBotSettings, enabled: !adminBotSettings.enabled })}
+                  className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.enabled ? 'text-emerald-600' : 'text-slate-400'}`}
+                >
+                  {adminBotSettings.enabled ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+                </button>
+              </div>
+
+              {/* Auto Reply in Shared Chat Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <div>
+                  <span className="font-extrabold text-xs text-slate-900 block">Respostas no Chat Geral</span>
+                  <span className="text-[10.5px] text-slate-500 font-medium">O bot responde instantaneamente no chat geral de encomendas</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveBotSettings({ ...adminBotSettings, autoReplyInSharedChat: !adminBotSettings.autoReplyInSharedChat })}
+                  className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.autoReplyInSharedChat ? 'text-emerald-600' : 'text-slate-400'}`}
+                >
+                  {adminBotSettings.autoReplyInSharedChat ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+                </button>
+              </div>
+
+              {/* Form Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Nome do Assistente Virtual
+                  </label>
+                  <input
+                    type="text"
+                    value={adminBotSettings.botName}
+                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, botName: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Início Expediente Humano
+                    </label>
+                    <input
+                      type="time"
+                      value={adminBotSettings.businessHoursStart}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursStart: e.target.value })}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Fim Expediente Humano
+                    </label>
+                    <input
+                      type="time"
+                      value={adminBotSettings.businessHoursEnd}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursEnd: e.target.value })}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Número WhatsApp para Escalamento Humano
+                  </label>
+                  <input
+                    type="text"
+                    value={adminBotSettings.whatsAppNumber}
+                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, whatsAppNumber: e.target.value })}
+                    placeholder="+244942043293"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Mensagem Padrão de Boas-Vindas
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={adminBotSettings.welcomeMessage}
+                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, welcomeMessage: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Mensagem Fora de Horário / Período Noturno
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={adminBotSettings.offHoursMessage}
+                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, offHoursMessage: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveBotSettings(adminBotSettings);
+                      speak("Configurações do Assistente Virtual IA gravadas com sucesso.");
+                    }}
+                    className="w-full py-3 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>Guardar Alterações do Bot</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Knowledge Base & Live Simulation */}
+            <div className="lg:col-span-6 space-y-6">
+              
+              {/* Knowledge Base Explorer */}
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-150 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-display">
+                      Base de Conhecimento Oficial ({KNOWLEDGE_BASE_ITEMS.length} tópicos)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">Cabinda & Luanda</span>
+                </div>
+
+                {/* Search in Knowledge Base */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    value={botKnowledgeSearch}
+                    onChange={(e) => setBotKnowledgeSearch(e.target.value)}
+                    placeholder="Filtrar base de conhecimento (ex: prazos, taxas, IBAN, portos)..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Knowledge Base Items List */}
+                <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                  {KNOWLEDGE_BASE_ITEMS
+                    .filter(item => 
+                      !botKnowledgeSearch.trim() || 
+                      item.question.toLowerCase().includes(botKnowledgeSearch.toLowerCase()) ||
+                      item.keywords.some(k => k.toLowerCase().includes(botKnowledgeSearch.toLowerCase()))
+                    )
+                    .map((item) => (
+                      <details key={item.id} className="group bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-2xl p-3.5 transition-colors">
+                        <summary className="font-extrabold text-xs text-slate-900 flex items-center justify-between cursor-pointer list-none">
+                          <div className="flex items-center gap-2 pr-2">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                            <span>{item.question}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                        </summary>
+                        <div className="mt-3 pt-2.5 border-t border-slate-200 text-xs text-slate-700 space-y-2 whitespace-pre-wrap leading-relaxed">
+                          <p>{item.detailedAnswer}</p>
+                          {item.suggestedNextQuestions.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-2">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase w-full">Perguntas Sugeridas:</span>
+                              {item.suggestedNextQuestions.map((q, qIdx) => (
+                                <span key={qIdx} className="text-[9.5px] bg-white border border-slate-200 px-2 py-0.5 rounded-lg text-slate-600 font-medium">
+                                  {q}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    ))}
+                </div>
+              </div>
+
+              {/* Real-time Simulator for Admin Testing */}
+              <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-5 rounded-3xl border border-slate-800 text-white space-y-3.5 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-300 font-display">
+                      Simulador de Dúvida em Tempo Real
+                    </span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full">
+                    Teste Instantâneo
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  Teste o motor do bot para verificar a resposta imediata que será enviada aos clientes:
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {POPULAR_QUESTIONS.slice(0, 4).map((q, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        const res = solveBotQueryLocally(q);
+                        alert(`🤖 [RESPOSTA DO MANO MEDIADOR IA]:\n\n${res.text}`);
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-200 text-[10px] font-bold rounded-lg border border-slate-700 cursor-pointer transition-all"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
           </div>
 
         </div>

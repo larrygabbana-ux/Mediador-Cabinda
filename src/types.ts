@@ -205,4 +205,31 @@ export interface ServiceRequest {
   createdAt: string;
 }
 
+export interface BotMessage {
+  id: string;
+  sender: 'user' | 'bot' | 'system';
+  text: string;
+  timestamp: string;
+  source?: 'gemini' | 'knowledge_base';
+  suggestedQuestions?: string[];
+  actionLink?: {
+    label: string;
+    view: string;
+    icon?: string;
+  };
+}
+
+export interface BotSettings {
+  enabled: boolean;
+  botName: string;
+  welcomeMessage: string;
+  offHoursMessage: string;
+  autoReplyInSharedChat: boolean;
+  businessHoursStart: string; // "08:00"
+  businessHoursEnd: string; // "18:00"
+  allowWhatsAppEscalation: boolean;
+  whatsAppNumber: string; // "+244942043293"
+}
+
+
 

@@ -224,6 +224,9 @@ export default function ClientDashboard({
     preferredCarrierId: ''
   });
 
+  // Tracking Search by code state
+  const [trackingSearchCode, setTrackingSearchCode] = useState('');
+
   // Suppliers Marketplace Filtering & Integration States
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SupplierProduct | null>(null);
@@ -1651,11 +1654,68 @@ export default function ClientDashboard({
       {/* 3) ACOMPANHAR PEDIDO (ACTIVE ORDER TRACKING ENGINE & CHAT) */}
       {currentView === 'acompanhar-pedido' && (
         <div className="space-y-4 animate-fade-in" id="acompanhar-pedido-screen">
+          
+          {/* Quick Tracking Code Search Bar */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <span>🔍</span> Rastreio Rápido por Código Oficial
+                </h3>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Insira o código de encomenda (ex: <strong>MED-1001</strong>) ou o número de Guia AGT (ex: <strong>GUI-CB-84920</strong>) para localizar o lote imediatamente.
+                </p>
+              </div>
+              <span className="text-[9px] bg-amber-50 text-amber-850 font-black px-2.5 py-1 rounded-full border border-amber-200 shrink-0 self-start sm:self-auto">
+                ⚡ 9 Etapas em Tempo Real
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={trackingSearchCode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setTrackingSearchCode(val);
+                  if (val.trim()) {
+                    const match = orders.find(o => 
+                      o.id.toLowerCase().includes(val.trim().toLowerCase()) || 
+                      (o.shippingGuideNumber && o.shippingGuideNumber.toLowerCase().includes(val.trim().toLowerCase())) ||
+                      o.productName.toLowerCase().includes(val.trim().toLowerCase())
+                    );
+                    if (match) {
+                      setSelectedOrderId(match.id);
+                    }
+                  }
+                }}
+                placeholder="Insira o código MED-XXXX ou nº de Guia..."
+                className="w-full pl-10 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-850 focus:outline-hidden focus:border-amber-400 focus:bg-white transition-colors"
+                id="quick-tracking-search-input"
+              />
+              {trackingSearchCode && (
+                <button
+                  type="button"
+                  onClick={() => setTrackingSearchCode('')}
+                  className="absolute right-3 top-2.5 text-[10px] text-slate-400 hover:text-slate-600 font-bold"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Orders checklist sidebar */}
             <div className="lg:col-span-4 space-y-3">
-              <h3 className="text-xs font-bold text-slate-450 uppercase tracking-wider mb-2">Selecione uma Carga</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-450 uppercase tracking-wider">Minhas Encomendas</h3>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-bold">
+                  {clientOrders.length} lotes
+                </span>
+              </div>
               
               {clientOrders.length === 0 ? (
                 <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-8 text-center text-slate-400">
@@ -1663,48 +1723,70 @@ export default function ClientDashboard({
                   <p className="text-sm font-semibold text-slate-750">Não possui encomendas</p>
                   <button 
                     onClick={() => setCurrentView('fazer-pedido')} 
-                    className="mt-3 bg-amber-400 text-slate-950 font-bold px-4 py-1.5 rounded-xl text-xs"
+                    className="mt-3 bg-amber-400 text-slate-950 font-bold px-4 py-1.5 rounded-xl text-xs cursor-pointer"
                   >
                     Fazer Meu Primeiro Pedido
                   </button>
                 </div>
               ) : (
-                clientOrders.map((ord) => {
-                  const statusDetails = getStatusLabelAndColor(ord.status);
-                  const isSelected = selectedOrderId === ord.id;
-                  return (
-                    <button
-                      key={ord.id}
-                      onClick={() => {
-                        setSelectedOrderId(ord.id);
-                        setOrderDetailTab('tracker');
-                        speak(`A carregar progresso da carga ${ord.id}`);
-                      }}
-                      className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden cursor-pointer flex flex-col gap-2 ${
-                        isSelected 
-                          ? 'bg-amber-50/40 border-amber-400 ring-2 ring-amber-100' 
-                          : 'bg-white border-slate-100 hover:border-slate-300'
-                      }`}
-                      id={`order-card-item-${ord.id}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-slate-700">{ord.id}</span>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(ord.createdAt).toLocaleDateString('pt-AO')}
-                        </span>
-                      </div>
+                clientOrders
+                  .filter(ord => !trackingSearchCode.trim() || 
+                    ord.id.toLowerCase().includes(trackingSearchCode.toLowerCase()) || 
+                    ord.productName.toLowerCase().includes(trackingSearchCode.toLowerCase()) ||
+                    (ord.shippingGuideNumber && ord.shippingGuideNumber.toLowerCase().includes(trackingSearchCode.toLowerCase()))
+                  )
+                  .map((ord) => {
+                    const statusDetails = getStatusLabelAndColor(ord.status);
+                    const isSelected = selectedOrderId === ord.id;
+                    return (
+                      <div
+                        key={ord.id}
+                        onClick={() => {
+                          setSelectedOrderId(ord.id);
+                          setOrderDetailTab('tracker');
+                          speak(`A carregar progresso da carga ${ord.id}`);
+                        }}
+                        className={`w-full text-left p-4 rounded-2xl border transition-all relative overflow-hidden cursor-pointer flex flex-col gap-2 ${
+                          isSelected 
+                            ? 'bg-amber-50/40 border-amber-400 ring-2 ring-amber-100' 
+                            : 'bg-white border-slate-100 hover:border-slate-300'
+                        }`}
+                        id={`order-card-item-${ord.id}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-mono font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded-md">{ord.id}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                  navigator.clipboard.writeText(ord.id);
+                                }
+                                showModalAlert('Código Copiado', `O código de rastreio ${ord.id} foi copiado para a sua área de transferência!`, 'info');
+                              }}
+                              className="text-[9px] text-slate-400 hover:text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded cursor-pointer font-bold"
+                              title="Copiar Código"
+                            >
+                              📋
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(ord.createdAt).toLocaleDateString('pt-AO')}
+                          </span>
+                        </div>
 
-                      <h4 className="text-xs font-bold text-slate-800 truncate">{ord.productName}</h4>
-                      
-                      <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-50">
-                        <span className="text-[10px] font-semibold text-slate-700">Qtd: {ord.quantity}</span>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full border font-extrabold ${statusDetails?.color}`}>
-                          {statusDetails?.label}
-                        </span>
+                        <h4 className="text-xs font-bold text-slate-800 truncate">{ord.productName}</h4>
+                        
+                        <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-50 text-[10px]">
+                          <span className="font-semibold text-slate-700">Qtd: {ord.quantity}</span>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full border font-extrabold ${statusDetails?.color}`}>
+                            {statusDetails?.label}
+                          </span>
+                        </div>
                       </div>
-                    </button>
-                  );
-                })
+                    );
+                  })
               )}
             </div>
 
@@ -1716,13 +1798,36 @@ export default function ClientDashboard({
                   {/* Detailed Box Header */}
                   <div className="bg-slate-50 p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-sm font-mono font-bold text-slate-800">{activeOrder.id}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 bg-slate-900 text-amber-400 px-2.5 py-1 rounded-lg">
+                          <span className="text-[9px] font-sans font-bold uppercase text-slate-400">Código:</span>
+                          <h3 className="text-xs font-mono font-black">{activeOrder.id}</h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                navigator.clipboard.writeText(activeOrder.id);
+                              }
+                              showModalAlert('Código de Rastreio Copiado', `O código oficial ${activeOrder.id} foi copiado para a sua área de transferência!`, 'info');
+                            }}
+                            className="text-[9px] text-white hover:text-amber-300 font-bold px-1"
+                            title="Copiar Código de Rastreio"
+                          >
+                            📋
+                          </button>
+                        </div>
+
                         <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-bold ${getStatusLabelAndColor(activeOrder.status)?.color}`}>
                           {getStatusLabelAndColor(activeOrder.status)?.label}
                         </span>
+
+                        {activeOrder.shippingGuideNumber && (
+                          <span className="text-[9px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full font-bold">
+                            Guia AGT: {activeOrder.shippingGuideNumber}
+                          </span>
+                        )}
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 mt-1">{activeOrder.productName}</h4>
+                      <h4 className="text-sm font-bold text-slate-900 mt-1.5">{activeOrder.productName}</h4>
                       <p className="text-[10px] text-slate-500">Fornecedor Luanda: {activeOrder.supplierName}</p>
                     </div>
 
@@ -2925,32 +3030,310 @@ export default function ClientDashboard({
         </div>
       )}
 
-      {/* 13) SOBRE NÓS (LOGISTICS & HISTORY INFO) */}
+      {/* 13) SOBRE NÓS (INSTITUTIONAL PRESENTATION & FOUNDER MANIFESTO) */}
       {currentView === 'sobre-nos' && (
-        <div className="max-w-2xl mx-auto bg-white border-0 sm:border border-slate-150 rounded-none sm:rounded-3xl p-4 sm:p-6 shadow-none sm:shadow-sm animate-fade-in" id="sobre-nos-screen">
-          <div className="flex items-center gap-3 border-b pb-3 mb-5">
-            <Info className="w-6 h-6 text-slate-700" />
-            <div>
-              <h3 className="text-lg font-bold font-display text-slate-900">Sobre o Mediador Cabinda</h3>
-              <p className="text-xs text-slate-500">Ponte logística exclusiva Cabinda - Luanda sem interrupções geográficas.</p>
-            </div>
-          </div>
+        <div className="max-w-4xl mx-auto space-y-6 animate-fade-in text-slate-800 text-left" id="sobre-nos-screen">
+          
+          {/* Hero Banner with Founder Signature & Mission */}
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl border border-slate-800">
+            <div className="absolute right-0 top-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute -bottom-10 -left-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-          <div className="space-y-4 text-xs text-slate-600 leading-relaxed font-semibold">
-            <p>
-              O <strong>Mediador Cabinda Lda</strong> é uma firma angolana constituída para solucionar o maior desafio comercial da província de Cabinda: o seu enclave geográfico. Devido à separação da província do resto do território angolano pelo rio Congo e pelo território da RDC, o tráfego terrestre de mercadorias é frequentemente demorado e burocrático.
-            </p>
-            <p>
-              Nós oferecemos a solução perfeita: <strong>intermediação fiscal</strong>. Você escolhe o que deseja comprar em Luanda - seja uma máquina pesada, ar condicionado, ou telemóveis - nossa equipa adquire o bem de forma fiscal, carrega na balsa marítima oficial ou voo TAAG Cargo, e entrega-lhe diretamente ao balcão de Cabinda.
-            </p>
-            <div className="bg-amber-100/40 p-4 rounded-2xl flex items-center gap-4 text-slate-800">
-              <Truck className="w-8 h-8 text-amber-500 shrink-0" />
-              <div>
-                <p className="font-bold">Emissão de Guias de Trânsito Seguras</p>
-                <p className="text-[11px] text-slate-500 font-medium">Todas as nossas rotas marítimas cumprem as regulação aduaneiras de Angola, garantindo que a sua carga chegue sem riscos de extravio ou impostos abusivos.</p>
+            <div className="relative z-10 space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest inline-flex items-center gap-1.5 shadow-sm font-display">
+                  🇦🇴 Apresentação Institucional Oficial
+                </span>
+                <span className="bg-slate-800/90 text-amber-350 border border-slate-700 text-[10px] font-bold px-3 py-1 rounded-full">
+                  Criado por João Hilário António
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="font-display font-black text-2xl sm:text-3xl tracking-tight text-white leading-tight">
+                  Mediador Cabinda: A Ponte Logística e Comercial que Quebrou o Isolamento do Enclave
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 max-w-3xl font-medium leading-relaxed">
+                  Uma iniciativa de engenharia tecnológica, logística e responsabilidade cívica concebida para aproximar Luanda e Cabinda, garantindo preços justos de fábrica, segurança contra burlas e dignidade económica para as famílias e empresários cabindenses.
+                </p>
+              </div>
+
+              {/* Founder Taglet */}
+              <div className="pt-2 flex items-center gap-3 border-t border-slate-800/80">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm shadow-md">
+                  JH
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white font-display">João Hilário António</h4>
+                  <p className="text-[10px] text-amber-400 font-medium">Fundador, Idealizador & Desenvolvedor do Mediador Cabinda</p>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* NOTA INTRODUTÓRIA */}
+          <div className="bg-white border border-slate-150 rounded-3xl p-6 sm:p-7 shadow-xs space-y-3">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+              <span className="text-xl">📜</span>
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900 uppercase tracking-wide">
+                1. Nota Introdutória: O Chamado da Inovação
+              </h3>
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-700 font-medium leading-relaxed text-justify">
+              Seja muito bem-vindo ao <strong>Mediador Cabinda</strong>. Esta plataforma não nasceu como uma simples experiência comercial, mas sim como a resposta prática, organizada e resoluta a um clamor histórico. Em Angola, nenhuma província carrega consigo uma particularidade territorial tão desafiadora quanto Cabinda. Diante de distâncias marítimas, fronteiras internacionais e barreiras de acesso aos grandes centros abastecedores de Luanda, o povo cabindense merecia uma ferramenta à altura dos seus anseios: moderna, transparente, acessível pelo telemóvel e respaldada por uma operação humana e logística séria.
+            </p>
+          </div>
+
+          {/* O PRINCÍPIO FUNDACIONAL & O PROBLEMA DO POVO DE CABINDA */}
+          <div className="bg-gradient-to-br from-amber-50/50 via-white to-amber-50/30 border border-amber-200/80 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-amber-200/60 pb-3">
+              <span className="text-xl">🎯</span>
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900 uppercase tracking-wide">
+                2. A Razão de Existir: Toda a Empresa Surge para Resolver o Problema de um Povo
+              </h3>
+            </div>
+
+            <blockquote className="p-4 bg-white/90 border-l-4 border-amber-400 rounded-2xl shadow-2xs italic text-xs sm:text-[12.5px] text-slate-800 font-semibold leading-relaxed">
+              "Toda a empresa com propósito duradouro surge da necessidade premente de solucionar a dor, o sofrimento ou as limitações que afetam a vida quotidiana de um povo. O Mediador Cabinda nasceu do compromisso de nunca aceitar que a descontinuidade geográfica seja sinónimo de atraso, carestia ou exclusão económica para os nossos irmãos de Cabinda."
+              <span className="block mt-2 font-bold font-sans not-italic text-[11px] text-amber-900">— João Hilário António, Criador do Mediador Cabinda</span>
+            </blockquote>
+
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-2">
+                <span>⚠️</span> O Diagnóstico Real: Os Quatro Grandes Problemas que o Aplicativo Resolve
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+                
+                <div className="p-4 bg-white rounded-2xl border border-slate-150 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">1</span>
+                    <h5 className="font-bold text-slate-900">Isolamento & Descontinuidade Territorial</h5>
+                  </div>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    Cabinda é um enclave separado fisicamente do restante território angolano pelo rio Congo e pela fronteira estrangeira da República Democrática do Congo (RDC). O trânsito rodoviário informal exige vistos, taxas de fronteira imprevisíveis e longos períodos de espera.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white rounded-2xl border border-slate-150 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">2</span>
+                    <h5 className="font-bold text-slate-900">Preços Abusivos & Escassez Crónica</h5>
+                  </div>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    Devido à dificuldade de abastecimento, materiais de construção (cimento, varões, tintas), maquinarias, peças industriais, eletrodomésticos e tecnologia chegam ao comércio informal de Cabinda com margens inflacionadas de 200% a 500% sobre o preço real de Luanda.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white rounded-2xl border border-slate-150 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">3</span>
+                    <h5 className="font-bold text-slate-900">Burlas & Insegurança em Compras Informais</h5>
+                  </div>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    Inúmeros cidadãos e empresas de Cabinda perdiam somas expressivas transferindo dinheiro para conhecidos ou supostos vendedores de redes sociais em Luanda, sem faturas, sem garantia de inspeção física e sem qualquer responsabilização em caso de extravio.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white rounded-2xl border border-slate-150 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">4</span>
+                    <h5 className="font-bold text-slate-900">Burocracia Portuária & Tributação AGT</h5>
+                  </div>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    O desembaraço de mercadorias no Porto de Luanda e a emissão da Guia de Trânsito para cabotagem nacional exigem conhecimento aduaneiro específico para evitar multas, retenções portuárias ou a cobrança indevida de dupla tributação fiscal.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* NOTA PROLONGADA E EXPLÍCITA: O QUE É O MEDIADOR CABINDA */}
+          <div className="bg-white border border-slate-150 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+              <span className="text-xl">🏢</span>
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900 uppercase tracking-wide">
+                3. Nota Prolongada e Explícita: O que é o Mediador Cabinda?
+              </h3>
+            </div>
+
+            <div className="space-y-3 text-xs sm:text-[12.5px] text-slate-700 font-medium leading-relaxed text-justify">
+              <p>
+                O <strong>Mediador Cabinda Lda</strong> é uma infraestrutura integrada de comércio eletrónico, intermediação fiscal e engenharia logística de cabotagem interprovincial. Mais do que um aplicativo móvel, somos o braço direito do cliente em Luanda e o seu garante de entrega segura em Cabinda.
+              </p>
+              <p>
+                A nossa plataforma funciona como um <strong>procurador mercantil e logístico institucional</strong>. Quando um cidadão, oficina, hospital, construtora ou comerciante em Cabinda necessita de um bem — seja um compressor industrial, barras de aço para construção, computadores para um escritório, ou geradores de energia —, ele não precisa de viajar para Luanda nem se sujeitar a intermediários obscuros.
+              </p>
+              <p>
+                A equipa do Mediador Cabinda realiza a compra direta no distribuidor oficial ou fábrica em Luanda, recolhe a fatura em nome do cliente, fiscaliza a conformidade técnica, acondiciona e paletiza no nosso armazém de estiva, emite os documentos fiscais junto da AGT (Administração Geral Tributária) e despacha via navio de cabotagem regular ou avião TAAG Cargo, entregando com nota fiscal e garantia no coração de Cabinda.
+              </p>
+            </div>
+
+            {/* Visual Flow Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-center space-y-1">
+                <span className="text-lg">🛒</span>
+                <h5 className="font-bold text-slate-900 text-xs">Compra Pelo Preço Real</h5>
+                <p className="text-[10.5px] text-slate-500 font-medium">Acesso aos preços de fábrica e atacado de Luanda, sem especulação.</p>
+              </div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-center space-y-1">
+                <span className="text-lg">🚢</span>
+                <h5 className="font-bold text-slate-900 text-xs">Cabotagem & Frete Legal</h5>
+                <p className="text-[10.5px] text-slate-500 font-medium">Rotas marítimas e aéreas homologadas com Guia de Trânsito AGT.</p>
+              </div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-center space-y-1">
+                <span className="text-lg">🛡️</span>
+                <h5 className="font-bold text-slate-900 text-xs">Garantia Total de 100%</h5>
+                <p className="text-[10.5px] text-slate-500 font-medium">Reembolso integral ou reposição em caso de avaria ou extravio.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* EXPLICAÇÃO DETALHADA PASSO A PASSO: PARA QUE SERVE E COMO FUNCIONA */}
+          <div className="bg-white border border-slate-150 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+              <span className="text-xl">⚙️</span>
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900 uppercase tracking-wide">
+                4. Explicação Detalhada Passo a Passo: Como Opera o Aplicativo
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 font-medium leading-relaxed">
+              O fluxo de trabalho do Mediador Cabinda foi desenhado com rigor militar e transparência absoluta, assegurando que o cliente saiba exatamente onde está cada Kwanza e cada encomenda em todas as fases:
+            </p>
+
+            <div className="space-y-4">
+              
+              {/* Step 1 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <span className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  01
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Solicitação do Pedido ou Escolha no Mercado Homologado</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    O cliente acede ao aplicativo no telemóvel e escolhe um produto já catalogado pelos nossos parceiros de Luanda ou preenche o formulário <strong>"Pedir Nova Intermediação"</strong>, descrevendo o artigo que pretende (com fotos, marca e especificações técnicas).
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <span className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  02
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Emissão de Orçamento Pro-forma Matemático & Transparente</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    A nossa mesa em Luanda valida o preço real no fornecedor e gera uma Fatura Pro-forma discriminando detalhadamente: o Custo de Compra, o Frete Marítimo/Aéreo, a Taxa Fixa de Despacho (8.000 Kz) e a Comissão de Intermediação (com rateio social de 3% para jovens afiliados, 2% de reserva e 5% de sustentação).
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <span className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  03
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Pagamento Blindado por Multicaixa Express ou IBAN Oficial</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    O cliente aprova o orçamento e realiza o pagamento seguro através de <strong>Multicaixa Express (MC Express)</strong> ou transferência para o nosso <strong>IBAN corporativo (AO06)</strong>. O comprovativo é anexado no app e validado pela contabilidade.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <span className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  04
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Compra Física, Vistoria Técnica & Embalamento de Proteção</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    Os nossos agentes em Luanda recolhem o produto diretamente na loja com fatura fiscal, conferem números de série e integridade física, e realizam a paletização e acondicionamento com plástico-bolha e caixas reforçadas no depósito central.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <span className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  05
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Desembaraço AGT & Cabotagem Marítima / Aérea</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    Emitimos a Guia de Trânsito AGT para isenção de dupla tributação e embarcamos a carga nos navios de cabotagem regular no Porto de Luanda (prazo de 3 a 7 dias úteis) ou em voos cargueiros TAAG Cargo (24 a 48 horas úteis).
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 6 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                <span className="text-amber-400">06</span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-slate-900">Rastreio em Tempo Real por Notificação (Código MED-XXXX)</h4>
+                  <p className="text-[11.5px] text-slate-600 font-medium leading-relaxed">
+                    O cliente acompanha cada porto e escala em tempo real na linha do tempo do aplicativo, recebendo alertas a cada movimentação e assistência 24/7 do nosso robô inteligente e dos operadores humanos.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 7 */}
+              <div className="flex items-start gap-3.5 p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200">
+                <span className="w-8 h-8 rounded-xl bg-emerald-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  ✓
+                </span>
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-xs text-emerald-900">Desembarque no Porto de Cabinda & Entrega Concluída</h4>
+                  <p className="text-[11.5px] text-emerald-800 font-medium leading-relaxed">
+                    Assim que o navio atraca, a carga é descarregada no <strong>Armazém C-4 do Porto de Cabinda</strong>. O cliente pode fazer o levantamento imediato ou solicitar a nossa equipa de estafetas para entrega à porta de casa ou no seu estaleiro.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* IMPACTO SOCIAL & JUVENTUDE EMPREENDEDORA */}
+          <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-7 shadow-lg border border-slate-800 space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+              <span className="text-xl">🤝</span>
+              <h3 className="font-display font-extrabold text-sm sm:text-base text-amber-400 uppercase tracking-wide">
+                5. Impacto Comunitário: Renda para a Juventude Cabindense
+              </h3>
+            </div>
+            
+            <p className="text-xs sm:text-[12.5px] text-slate-300 font-medium leading-relaxed">
+              O modelo idealizado por <strong>João Hilário António</strong> não visa apenas a eficiência logística, mas também a capacitação económica local. Através do <strong>Programa Jovens Empreendedores de Cabinda</strong>, qualquer jovem ou parceiro comunitário pode registar-se gratuitamente no aplicativo, receber o seu código de afiliação e ganhar uma comissão direta de <strong>15%</strong> sobre cada intermediação gerada para empresas ou comerciantes locais. Transformamos a logística num motor de criação de emprego e renda digna.
+            </p>
+          </div>
+
+          {/* DADOS DE CONTATO E ARMAZÉNS */}
+          <div className="bg-white border border-slate-150 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
+            <h4 className="font-display font-black text-sm text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <span>📍</span> Localizações Físicas & Contactos Oficiais
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-1">
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">🏢 Balcão & Armazém Cabinda</span>
+                <p className="font-bold text-slate-900">Armazém C-4, Recinto do Porto Comercial</p>
+                <p className="text-slate-500 text-[11px]">Rua Direita, Província de Cabinda, Angola</p>
+                <p className="text-amber-800 font-mono text-[11px] font-bold pt-1">Atendimento: Seg-Sex 08h-18h | Sáb 08h-13h</p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 space-y-1">
+                <span className="text-[10px] uppercase font-black text-slate-400 block tracking-wider">🏭 Armazém de Estiva Luanda</span>
+                <p className="font-bold text-slate-900">Parque Logístico Portuário / Viana</p>
+                <p className="text-slate-500 text-[11px]">Luanda, Angola</p>
+                <p className="text-slate-600 text-[11px] font-bold pt-1">WhatsApp Geral: +244 942 043 293 / +244 945 888 777</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
 

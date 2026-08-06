@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Client, Message, Order } from '../types';
+import { solveBotQueryLocally } from '../utils/aiBotKnowledge';
 import { 
   Send, 
   User, 
@@ -28,7 +29,9 @@ import {
   Search,
   MessageSquare,
   Phone,
-  Settings
+  Settings,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 
 interface SharedChatProps {
@@ -374,10 +377,10 @@ export default function SharedChat({
     setInputText('');
     setShowAttachmentsMenu(false);
 
-    // Trigger immediate simulated response based on selected channel context
+    // Trigger immediate simulated response based on selected channel context or AI Bot Knowledge
     if (currentUserRole === 'client') {
       setTimeout(() => {
-        let responseText = 'Olá! Recebemos a sua mensagem. Nossos operadores estão validando a entrega para Cabinda.';
+        let responseText = '';
         
         if (isPriority) {
           responseText = '🚨 *[ATENDIMENTO PRIORITÁRIO ATIVADO]* Olá! Sou o despachante de plantão. Identificamos a urgência comercial regulamentar e estamos acelerando o trâmite portuário.';
@@ -393,16 +396,24 @@ export default function SharedChat({
           responseText = 'Olá! O Senhor Diretor Geral do Mediador Cabinda recebeu o seu pedido aduaneiro e está em coordenação com a Loja Central de Cabinda para garantir as mercadorias de forma ultra-segura.';
         } else if (activeChannelId === 'transportadora-xpto') {
           responseText = 'Olá! O Senhor Diretor Geral do Mediador Cabinda está em contacto direto com o armador da Transportadora XPTO sobre esta carga aérea/marítima e actualizará o seu estado brevemente.';
-        } else if (text.toLowerCase().includes('preço') || text.toLowerCase().includes('orçamento') || text.toLowerCase().includes('quanto')) {
-          responseText = 'O orçamento oficial detalhado com frete marítimo e desembaraço de portos está a ser computado pela mesa executiva.';
-        } else if (text.toLowerCase().includes('pagamento') || text.toLowerCase().includes('paguei')) {
-          responseText = 'Agradecemos o envio do comprovante bancário de Luanda/Cabinda. Despacharemos a carga em conformidade com o porto assim que confirmado.';
+        } else {
+          // Check if the query is answered by the 24/7 AI Bot knowledge base
+          const botResult = solveBotQueryLocally(text);
+          if (botResult && botResult.text) {
+            responseText = `🤖 *[Assistente Virtual 24/7]*\n\n${botResult.text}\n\n_Para falar com a gerência humana, pode também enviar mensagem no WhatsApp (+244 942 043 293)._`;
+          } else if (text.toLowerCase().includes('preço') || text.toLowerCase().includes('orçamento') || text.toLowerCase().includes('quanto')) {
+            responseText = 'O orçamento oficial detalhado com frete marítimo e desembaraço de portos está a ser computado pela mesa executiva.';
+          } else if (text.toLowerCase().includes('pagamento') || text.toLowerCase().includes('paguei')) {
+            responseText = 'Agradecemos o envio do comprovante bancário de Luanda/Cabinda. Despacharemos a carga em conformidade com o porto assim que confirmado.';
+          } else {
+            responseText = 'Olá! Recebemos a sua mensagem no canal do Mediador Cabinda. Nossos operadores e o Assistente IA 24/7 estão ao seu dispor para validar qualquer encomenda ou rota logística.';
+          }
         }
 
         // Send simulated reply into the correct active context
         onSendMessage(responseText, undefined, false, 'admin', destChanId);
         notifyUser("Nova mensagem recebida no canal do Mediador.");
-      }, 1500);
+      }, 1200);
     }
   };
 

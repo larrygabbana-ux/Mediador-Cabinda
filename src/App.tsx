@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from './types';
+import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest, BotSettings } from './types';
 import { 
   getClients, 
   getOrders, 
@@ -31,6 +31,7 @@ import {
 } from './data/mockData';
 import ClientDashboard from './components/ClientDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import AiChatbotModal from './components/AiChatbotModal';
 // @ts-ignore
 import appLogoImg from './assets/images/mediador_cabinda_logo_1783098275536.jpg';
 import { 
@@ -60,7 +61,9 @@ import {
   Monitor,
   Mic,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 
 export default function App() {
@@ -128,6 +131,26 @@ export default function App() {
   // States to allow opening and reading notifications with general reply capability
   const [selectedNotificationForModal, setSelectedNotificationForModal] = useState<Notification | null>(null);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
+
+  // AI Chatbot 24/7 State
+  const [showAiBotModal, setShowAiBotModal] = useState(false);
+  const [botSettings, setBotSettings] = useState<BotSettings>(() => {
+    try {
+      const saved = localStorage.getItem('mediador_cabinda_bot_settings');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      enabled: true,
+      botName: 'Mano Mediador IA',
+      welcomeMessage: 'Olá! Sou o Assistente Virtual 24/7 do Mediador Cabinda. Posso esclarecer qualquer dúvida sobre encomendas, prazos marítimos/aéreos, pagamentos por Multicaixa Express ou IBAN e rastreio de cargas.',
+      offHoursMessage: 'Estamos no período noturno/fora de expediente, mas eu estou 100% online para ajudá-lo com respostas imediatas!',
+      autoReplyInSharedChat: true,
+      businessHoursStart: '08:00',
+      businessHoursEnd: '18:00',
+      allowWhatsAppEscalation: true,
+      whatsAppNumber: '+244942043293'
+    };
+  });
 
   // Search state for Home View
   const [homeSearchQuery, setHomeSearchQuery] = useState('');
@@ -861,14 +884,32 @@ export default function App() {
           {/* RIGHT ACTION CONTROLS: CONSOLIDATED NOTIFICATIONS + RETURN TO CLIENT FOR ADMIN */}
           <div className="flex items-center gap-2 shrink-0">
             {role === 'client' && isAuthorized && (
-              <div className="sm:relative">
-                {/* Integrated Profile Avatar holding Notification Badge */}
+              <>
+                {/* AI Chatbot quick trigger */}
                 <button
-                  onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
-                  className="bg-transparent p-0 rounded-full hover:scale-102 active:scale-98 transition-all relative cursor-pointer flex items-center gap-1.5 focus:outline-2 focus:outline-blue-500"
-                  id="notifications-profile-btn"
-                  title="Notificações e Perfil"
+                  onClick={() => {
+                    setShowAiBotModal(true);
+                    speakText("Assistente IA 24 horas aberto");
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-400/20 hover:bg-amber-400/30 active:scale-95 text-amber-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer border border-amber-400/40 shadow-xs"
+                  title="Abrir Assistente Virtual IA 24/7"
+                  id="header-ai-bot-btn"
                 >
+                  <div className="relative">
+                    <Bot className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
+                  </div>
+                  <span className="hidden sm:inline">IA 24/7</span>
+                </button>
+
+                <div className="sm:relative">
+                  {/* Integrated Profile Avatar holding Notification Badge */}
+                  <button
+                    onClick={() => setShowNotificationsMenu(!showNotificationsMenu)}
+                    className="bg-transparent p-0 rounded-full hover:scale-102 active:scale-98 transition-all relative cursor-pointer flex items-center gap-1.5 focus:outline-2 focus:outline-blue-500"
+                    id="notifications-profile-btn"
+                    title="Notificações e Perfil"
+                  >
                   <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 border-2 border-slate-950 flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm relative overflow-hidden">
                     {clients.find(c => c.id === activeClientId)?.name.substring(0, 2).toUpperCase() || 'MC'}
                   </div>
@@ -933,7 +974,8 @@ export default function App() {
                   </div>
                 )}
               </div>
-            )}
+            </>
+          )}
 
             {/* If Admin view, show simple exit button */}
             {role === 'admin' && isAuthorized && (
@@ -1030,6 +1072,32 @@ export default function App() {
                     <span>FAZER PEDIDO NOVO</span>
                   </div>
                   <span className="text-[10px] bg-slate-950 text-amber-300 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">CTA</span>
+                </button>
+              </div>
+
+              {/* 24/7 AI Chatbot Quick Help */}
+              <div className="space-y-1">
+                <button
+                  onClick={() => {
+                    setShowAiBotModal(true);
+                    setSidebarOpen(false);
+                    speakText("Abrindo Assistente Virtual IA 24 horas");
+                  }}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl text-left text-xs font-black transition-all bg-gradient-to-r from-amber-50 to-amber-100/90 text-slate-900 border border-amber-300 hover:bg-amber-100 hover:scale-[1.01] active:scale-[0.99] shadow-xs cursor-pointer"
+                  id="sidebar-ai-bot-btn"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-2xs shrink-0">
+                      <Bot className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <span className="block leading-tight font-extrabold">Assistente IA 24/7</span>
+                      <span className="text-[9px] text-amber-900/80 font-medium">Tire dúvidas a qualquer hora</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-2xs">
+                    Online
+                  </span>
                 </button>
               </div>
 
@@ -1949,6 +2017,49 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* FLOATING 24/7 AI CHATBOT BUTTON */}
+      {isAuthorized && (
+        <aside aria-label="Assistente Virtual IA 24/7" className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2 pointer-events-auto">
+          <button
+            onClick={() => {
+              setShowAiBotModal(true);
+              speakText("Abrindo Assistente Virtual Inteligente 24 horas");
+            }}
+            className="group flex items-center gap-2.5 bg-slate-950 hover:bg-slate-900 text-white pl-3 pr-4 py-2.5 rounded-full shadow-2xl border-2 border-amber-400 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            id="floating-ai-bot-btn"
+            title="Assistente Virtual 24/7 - Dúvidas sobre encomendas, prazos, taxas e pagamentos"
+          >
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm group-hover:rotate-12 transition-transform">
+                <Bot className="w-4.5 h-4.5" />
+              </div>
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-ping"></span>
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-950 rounded-full"></span>
+            </div>
+            <div className="text-left hidden sm:block">
+              <div className="flex items-center gap-1.5 leading-none">
+                <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">Assistente IA</span>
+                <span className="text-[8px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-500/30">24/7</span>
+              </div>
+              <p className="text-[9.5px] text-slate-300 font-medium mt-0.5 leading-none">Dúvidas? Resposta na hora</p>
+            </div>
+          </button>
+        </aside>
+      )}
+
+      {/* 24/7 AI CHATBOT MODAL */}
+      <AiChatbotModal
+        isOpen={showAiBotModal}
+        onClose={() => setShowAiBotModal(false)}
+        onNavigateView={(view) => {
+          setCurrentView(view as any);
+          speakText(`Navegando para ${view}`);
+        }}
+        clientName={clients.find(c => c.id === activeClientId)?.name}
+        clientTier={clients.find(c => c.id === activeClientId)?.tier}
+        botSettings={botSettings}
+      />
 
     </div>
   );
