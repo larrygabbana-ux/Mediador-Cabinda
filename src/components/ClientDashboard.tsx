@@ -4,7 +4,24 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest } from '../types';
+import { 
+  Client, 
+  Order, 
+  Message, 
+  Notification, 
+  OrderStatus, 
+  CarrierCompany, 
+  Supplier, 
+  SupplierProduct, 
+  SupplierMessage, 
+  Collaborator, 
+  CollaboratorSale, 
+  SupplierService, 
+  ServiceRequest,
+  GeneralLogisticsSettings,
+  DynamicKnowledgeItem
+} from '../types';
+import { getStoredLogisticsConfig } from '../utils/aiBotKnowledge';
 import { PROVINCES_OF_ANGOLA, MUNICIPALITIES } from '../data/mockData';
 import { 
   ShoppingBag, 
@@ -44,10 +61,17 @@ import {
   XCircle,
   Mic,
   Menu,
-  Wrench
+  Wrench,
+  Layers
 } from 'lucide-react';
 import SharedChat from './SharedChat';
 import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
+import MarketplaceCategoryNav from './marketplace/MarketplaceCategoryNav';
+import MarketplaceHeroBanner from './marketplace/MarketplaceHeroBanner';
+import MarketplaceSearchBar from './marketplace/MarketplaceSearchBar';
+import ProductCard from './marketplace/ProductCard';
+import ProductDetailsModal from './marketplace/ProductDetailsModal';
+import { MARKETPLACE_CATEGORIES, getCategoryById, getSubCategoryName } from '../data/marketplaceTaxonomy';
 
 interface ClientDashboardProps {
   clients: Client[];
@@ -94,6 +118,8 @@ interface ClientDashboardProps {
   serviceRequests: ServiceRequest[];
   onCreateServiceRequest: (req: ServiceRequest) => void;
   onUpdateServiceRequest: (req: ServiceRequest) => void;
+  logisticsConfig?: GeneralLogisticsSettings;
+  knowledgeBase?: DynamicKnowledgeItem[];
 }
 
 export default function ClientDashboard({
@@ -136,8 +162,59 @@ export default function ClientDashboard({
   onCreateSupplierService,
   serviceRequests,
   onCreateServiceRequest,
-  onUpdateServiceRequest
+  onUpdateServiceRequest,
+  logisticsConfig,
+  knowledgeBase
 }: ClientDashboardProps) {
+  // Live Active Logistics Configuration (Synchronized in real-time with Admin changes)
+  const rawLogistics = logisticsConfig || getStoredLogisticsConfig();
+  const activeLogistics: GeneralLogisticsSettings = {
+    ...rawLogistics,
+    pickupLocationCabinda: rawLogistics.pickupLocationCabinda || rawLogistics.pickupAddressCabinda || 'Armazém C-4, Recinto Portuário de Cabinda, Rua Direita',
+    pickupAddressCabinda: rawLogistics.pickupAddressCabinda || rawLogistics.pickupLocationCabinda || 'Armazém C-4, Recinto Portuário de Cabinda, Rua Direita',
+    consolidationWarehouseLuanda: rawLogistics.consolidationWarehouseLuanda || rawLogistics.consolidationAddressLuanda || 'Parque Logístico Portuário / Viana, Luanda',
+    consolidationAddressLuanda: rawLogistics.consolidationAddressLuanda || rawLogistics.consolidationWarehouseLuanda || 'Parque Logístico Portuário / Viana, Luanda',
+    intermediationFeePercentage: rawLogistics.intermediationFeePercentage || rawLogistics.intermediationFeeRate || '10% a 15%',
+    intermediationFeeRate: rawLogistics.intermediationFeeRate || rawLogistics.intermediationFeePercentage || '10% a 15%',
+    customsTransitFeeAGT: rawLogistics.customsTransitFeeAGT || rawLogistics.customsTaxAGT || '8.000 AOA',
+    customsTaxAGT: rawLogistics.customsTaxAGT || rawLogistics.customsTransitFeeAGT || '8.000 AOA',
+    guaranteeAndRefundPolicy: rawLogistics.guaranteeAndRefundPolicy || rawLogistics.warrantyAndRefundPolicy || 'Reembolso total de 100% ou reposição imediata',
+    warrantyAndRefundPolicy: rawLogistics.warrantyAndRefundPolicy || rawLogistics.guaranteeAndRefundPolicy || 'Reembolso total de 100% ou reposição imediata',
+    operationalNotice: rawLogistics.operationalNotice || rawLogistics.operationalNote || '',
+    operationalNote: rawLogistics.operationalNote || rawLogistics.operationalNotice || '',
+    modes: {
+      aereo: {
+        ...rawLogistics.modes?.aereo,
+        averageTime: rawLogistics.modes?.aereo?.averageTime || rawLogistics.modes?.aereo?.estimatedDays || '1 dia',
+        estimatedDays: rawLogistics.modes?.aereo?.estimatedDays || rawLogistics.modes?.aereo?.averageTime || '1 dia',
+        costEstimate: rawLogistics.modes?.aereo?.costEstimate || rawLogistics.modes?.aereo?.costPerKg || '2.500 AOA / kg',
+        costPerKg: rawLogistics.modes?.aereo?.costPerKg || rawLogistics.modes?.aereo?.costEstimate || '2.500 AOA / kg',
+        recommendation: rawLogistics.modes?.aereo?.recommendation || rawLogistics.modes?.aereo?.recommendedFor || 'Cargas expressas e urgentes',
+        recommendedFor: rawLogistics.modes?.aereo?.recommendedFor || rawLogistics.modes?.aereo?.recommendation || 'Cargas expressas e urgentes',
+        status: rawLogistics.modes?.aereo?.status || 'ativo'
+      },
+      maritimo: {
+        ...rawLogistics.modes?.maritimo,
+        averageTime: rawLogistics.modes?.maritimo?.averageTime || rawLogistics.modes?.maritimo?.estimatedDays || '2–3 dias',
+        estimatedDays: rawLogistics.modes?.maritimo?.estimatedDays || rawLogistics.modes?.maritimo?.averageTime || '2–3 dias',
+        costEstimate: rawLogistics.modes?.maritimo?.costEstimate || rawLogistics.modes?.maritimo?.costPerKg || '450 AOA / kg',
+        costPerKg: rawLogistics.modes?.maritimo?.costPerKg || rawLogistics.modes?.maritimo?.costEstimate || '450 AOA / kg',
+        recommendation: rawLogistics.modes?.maritimo?.recommendation || rawLogistics.modes?.maritimo?.recommendedFor || 'Cargas gerais e pesadas',
+        recommendedFor: rawLogistics.modes?.maritimo?.recommendedFor || rawLogistics.modes?.maritimo?.recommendation || 'Cargas gerais e pesadas',
+        status: rawLogistics.modes?.maritimo?.status || 'ativo'
+      },
+      terrestre: {
+        ...rawLogistics.modes?.terrestre,
+        averageTime: rawLogistics.modes?.terrestre?.averageTime || rawLogistics.modes?.terrestre?.estimatedDays || '7–8 dias',
+        estimatedDays: rawLogistics.modes?.terrestre?.estimatedDays || rawLogistics.modes?.terrestre?.averageTime || '7–8 dias',
+        costEstimate: rawLogistics.modes?.terrestre?.costEstimate || rawLogistics.modes?.terrestre?.costPerKg || '350 AOA / kg',
+        costPerKg: rawLogistics.modes?.terrestre?.costPerKg || rawLogistics.modes?.terrestre?.costEstimate || '350 AOA / kg',
+        recommendation: rawLogistics.modes?.terrestre?.recommendation || rawLogistics.modes?.terrestre?.recommendedFor || 'Cargas volumosas e materiais',
+        recommendedFor: rawLogistics.modes?.terrestre?.recommendedFor || rawLogistics.modes?.terrestre?.recommendation || 'Cargas volumosas e materiais',
+        status: rawLogistics.modes?.terrestre?.status || 'ativo'
+      }
+    }
+  };
   
   // Tab/Tracker States
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(
@@ -217,11 +294,13 @@ export default function ClientDashboard({
     quantity: 1,
     supplierName: '',
     supplierPhone: '',
-    supplierLocation: 'Luanda, Maculusso',
+    supplierLocation: 'Luanda, Mercado dos Congolenses / São Paulo',
     notes: '',
     deliveryOption: 'escritorio' as 'escritorio' | 'domicilio',
     deliveryAddress: '',
-    preferredCarrierId: ''
+    preferredCarrierId: '',
+    routeDirection: 'Luanda-Cabinda' as 'Luanda-Cabinda' | 'Cabinda-Luanda',
+    transportMode: 'maritimo' as 'maritimo' | 'aereo' | 'terrestre'
   });
 
   // Tracking Search by code state
@@ -230,6 +309,17 @@ export default function ClientDashboard({
   // Suppliers Marketplace Filtering & Integration States
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<SupplierProduct | null>(null);
+  const [marketActiveTab, setMarketActiveTab] = useState<'products' | 'suppliers'>('products');
+  const [marketSearchTerm, setMarketSearchTerm] = useState('');
+  const [marketSelectedCategory, setMarketSelectedCategory] = useState('');
+  const [marketSelectedSubCategory, setMarketSelectedSubCategory] = useState('');
+  const [marketSelectedSupplier, setMarketSelectedSupplier] = useState('');
+  const [marketSelectedLocation, setMarketSelectedLocation] = useState('');
+  const [marketSortBy, setMarketSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'rating' | 'sales'>('relevance');
+  const [marketOnlyInStock, setMarketOnlyInStock] = useState(false);
+  const [marketOnlySponsored, setMarketOnlySponsored] = useState(false);
+
+  // Backward-compatible filter fallbacks
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<'all' | 'Luanda' | 'Cabinda'>('all');
   const [supplierSearchText, setSupplierSearchText] = useState('');
   const [supplierSelectedCategory, setSupplierSelectedCategory] = useState('all');
@@ -254,6 +344,49 @@ export default function ClientDashboard({
     if (prod.id && prod.id.startsWith('PRD-')) return prod.id;
     return `PRD-${(prod.id || '1001').slice(-4).toUpperCase()}`;
   };
+
+  // Filtered & Sorted Marketplace Products
+  const filteredMarketProducts = supplierProducts.filter(prod => {
+    if (!prod.published) return false;
+    
+    // Search query matching
+    const query = (marketSearchTerm || supplierSearchText).trim().toLowerCase();
+    if (query) {
+      const matchName = prod.name.toLowerCase().includes(query);
+      const matchDesc = prod.description?.toLowerCase().includes(query);
+      const matchCode = (prod.productCode || getProductCode(prod)).toLowerCase().includes(query);
+      const matchBrand = (prod.brand || '').toLowerCase().includes(query);
+      const matchTags = prod.tags?.some(t => t.toLowerCase().includes(query));
+      if (!matchName && !matchDesc && !matchCode && !matchBrand && !matchTags) return false;
+    }
+    
+    // Category & Subcategory matching
+    if (marketSelectedCategory && prod.category !== marketSelectedCategory) return false;
+    if (marketSelectedSubCategory && prod.subCategory !== marketSelectedSubCategory) return false;
+    
+    // Supplier filter
+    if (marketSelectedSupplier && prod.supplierId !== marketSelectedSupplier) return false;
+    
+    // Location filter
+    const locFilter = marketSelectedLocation || (selectedLocationFilter !== 'all' ? selectedLocationFilter : '');
+    if (locFilter && prod.location !== locFilter) return false;
+    
+    // Stock filter
+    if (marketOnlyInStock && (prod.availability === 'esgotado' || prod.stock === 0)) return false;
+    
+    // Sponsored filter
+    if (marketOnlySponsored && !prod.sponsored && !prod.featured) return false;
+    
+    return true;
+  }).sort((a, b) => {
+    if (marketSortBy === 'price-asc') return a.price - b.price;
+    if (marketSortBy === 'price-desc') return b.price - a.price;
+    if (marketSortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+    if (marketSortBy === 'sales') return (b.salesCount || 0) - (a.salesCount || 0);
+    // relevance / default: sponsored first, then newest
+    if (a.sponsored !== b.sponsored) return a.sponsored ? -1 : 1;
+    return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
+  });
 
   // Direct Buy (Compra Direta Imediata) States
   const [isDirectBuyMode, setIsDirectBuyMode] = useState(false);
@@ -317,25 +450,33 @@ export default function ClientDashboard({
     return priority[b.plan] - priority[a.plan];
   });
 
-  // Support / Live Bot FAQ States
-  const [faqAnswers, setFaqAnswers] = useState<{ q: string; a: string }[]>([
+  // Support / Live Bot FAQ States (Synchronized dynamically with activeLogistics)
+  const faqAnswers = [
     {
-      q: "Qual o prazo padrão de trânsito Luanda para Cabinda?",
-      a: "Temos duas modalidades: Via Aérea (TAAG Cargo) leva em média de 1 a 2 dias úteis de aeroporto para aeroporto. Via Marítima de Cabotagem leva cerca de 6 a 8 dias de porto a porto comercial."
+      q: "Qual o prazo padrão de trânsito entre Luanda e Cabinda?",
+      a: `Os nossos prazos oficiais são: Via Aérea (${activeLogistics?.modes?.aereo?.averageTime || '1 dia'}), Via Marítima de Cabotagem (${activeLogistics?.modes?.maritimo?.averageTime || '2–3 dias'}) e Via Terrestre (${activeLogistics?.modes?.terrestre?.averageTime || '7–8 dias'}). Todos os prazos são estimativas médias operacionais e fiscais.`
     },
     {
-      q: "Onde fica situado o escritório do Mediador em Cabinda?",
-      a: "O nosso pavilhão central de depósitos e balcão de apoio localiza-se na Zona Portuária de Cabinda, Armazém C-4. Venha visitar-nos!"
+      q: "O Mediador atende clientes nos dois sentidos: Luanda ➔ Cabinda e Cabinda ➔ Luanda?",
+      a: `Sim, com certeza! Operamos em ambos os fluxos: Luanda ➔ Cabinda (compras em Luanda entregues em Cabinda) e Cabinda ➔ Luanda (encomendas e produtos originados em Cabinda enviados para clientes e empresas em Luanda), com emissão de Guia de Trânsito AGT e seguro de carga.`
     },
     {
-      q: "Como é calculada a taxa de comissão de intermediação?",
-      a: "Cobramos uma taxa base de 10% a 15% calculada sobre o valor original faturado pelo fornecedor em Luanda. Clientes Bronze, Prata e Ouro beneficiam de descontos automáticos de fidelidade de até 6%!"
+      q: "Onde ficam situados os armazéns de consolidação e levantamento?",
+      a: `Em Cabinda: ${activeLogistics?.pickupAddressCabinda || 'Armazém C-4, Zona Portuária de Cabinda'}. Em Luanda: ${activeLogistics?.consolidationAddressLuanda || 'Parque Logístico Portuário / Viana'}.`
     },
     {
-      q: "É possível agendar entrega à porta em Cabinda?",
-      a: "Sim! Por uma taxa fixa acessível de 5.000 AOA, entregamos encomendas pesadas ou leves em qualquer bairro de Cabinda (Sede), Cacongo ou Buco-Zau."
+      q: "Como é calculada a comissão de intermediação e taxas fiscais?",
+      a: `A nossa comissão de intermediação padrão é de ${activeLogistics?.intermediationFeeRate || '12%'} e o despacho aduaneiro padrão da AGT é de ${activeLogistics?.customsTaxAGT || '5% a 8%'}. Clientes fidelizados beneficiam de descontos automáticos!`
+    },
+    {
+      q: "Como funciona a garantia contra perdas ou danos?",
+      a: activeLogistics?.warrantyAndRefundPolicy || "Reembolso total de 100% ou reposição imediata do produto em caso de avaria ou sinistro no transporte."
+    },
+    {
+      q: "É possível agendar entrega ao domicílio?",
+      a: "Sim! Por uma taxa fixa acessível de 5.000 AOA, entregamos encomendas em qualquer bairro de Cabinda (Sede, Cacongo, Buco-Zau) ou em toda a província de Luanda (Viana, Talatona, Kilamba, etc.)."
     }
-  ]);
+  ];
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
   // Pay form states
@@ -360,8 +501,21 @@ export default function ClientDashboard({
   const [calcCommissionPrice, setCalcCommissionPrice] = useState<number>(90000);
   const [calcMonthlyGoal, setCalcMonthlyGoal] = useState<number>(120000);
 
+  const fallbackClient: Client = {
+    id: activeClientId || 'cli-novo',
+    name: 'Cliente',
+    phone: '+244 942 043 293',
+    email: 'cliente@mediadorcabinda.ao',
+    address: 'Cabinda, Angola',
+    nif: '000000000CA01',
+    province: 'Cabinda',
+    municipality: 'Cabinda (Sede)',
+    points: 100,
+    tier: 'Standard'
+  };
+
   // Active Client computed
-  const client = clients.find(c => c.id === activeClientId) || clients[0];
+  const client = clients.find(c => c.id === activeClientId) || clients[0] || fallbackClient;
   const clientOrders = orders.filter(o => o.clientId === activeClientId);
   const activeOrder = clientOrders.find(o => o.id === selectedOrderId) || clientOrders[0];
 
@@ -383,14 +537,32 @@ export default function ClientDashboard({
     }
   };
 
-  // Pre-calculated freight estimator logic
+  // Helper to parse numeric rate from strings like "2.500 AOA / kg" or "450"
+  const parseCostPerKg = (val: any, fallback: number): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return fallback;
+    const cleaned = String(val).replace(/\./g, '').replace(/[^0-9]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+  };
+
+  // Pre-calculated freight estimator logic based on active logistics configuration
   const getEstimatedFreight = () => {
-    let freight = 8000;
-    if (newOrderForm.productName.toLowerCase().includes('laptop') || newOrderForm.productName.toLowerCase().includes('computador')) freight = 12000;
-    if (newOrderForm.productName.toLowerCase().includes('bomba') || newOrderForm.productName.toLowerCase().includes('motor')) freight = 15000;
-    if (newOrderForm.productName.toLowerCase().includes('pneu')) freight = 25000;
-    if (newOrderForm.productName.toLowerCase().includes('contraplacado') || newOrderForm.productName.toLowerCase().includes('madeira')) freight = 40000;
-    return freight * newOrderForm.quantity;
+    const mode = newOrderForm.transportMode || 'maritimo';
+    const modeConfig = activeLogistics?.modes?.[mode];
+    const modeRateNumeric = parseCostPerKg(modeConfig?.costPerKg || modeConfig?.costEstimate, mode === 'aereo' ? 2500 : mode === 'terrestre' ? 800 : 450);
+    
+    // Base unit weight estimation
+    let baseWeight = 5;
+    const nameLower = newOrderForm.productName.toLowerCase();
+    if (nameLower.includes('laptop') || nameLower.includes('computador') || nameLower.includes('telemovel') || nameLower.includes('celular')) baseWeight = 3;
+    else if (nameLower.includes('bomba') || nameLower.includes('motor')) baseWeight = 25;
+    else if (nameLower.includes('pneu') || nameLower.includes('bateria')) baseWeight = 15;
+    else if (nameLower.includes('contraplacado') || nameLower.includes('madeira') || nameLower.includes('gerador')) baseWeight = 45;
+    else if (nameLower.includes('vestuario') || nameLower.includes('peruca') || nameLower.includes('roupa')) baseWeight = 2;
+
+    const freight = Math.max(3500, Math.floor(modeRateNumeric * baseWeight));
+    return freight * (newOrderForm.quantity || 1);
   };
 
   const getCalcDetails = () => {
@@ -413,10 +585,14 @@ export default function ClientDashboard({
 
     const dutyAmount = Math.floor(rawPrice * dutyRate);
 
-    // 2) Shipping rate per Kg depending on preferred dispatcher
+    // 2) Shipping rate per Kg depending on active logistics mode or chosen carrier
+    const mode = newOrderForm.transportMode || 'maritimo';
+    const modeConfig = activeLogistics?.modes?.[mode];
+    const modeRateNumeric = parseCostPerKg(modeConfig?.costPerKg || modeConfig?.costEstimate, mode === 'aereo' ? 2500 : mode === 'terrestre' ? 800 : 450);
+
     const selectedCarrierId = newOrderForm.preferredCarrierId || carriersList[0]?.id || '';
     const selectedCarrier = carriersList.find(c => c.id === selectedCarrierId);
-    const baseRate = selectedCarrier ? selectedCarrier.baseRatePerKg : 1500;
+    const baseRate = selectedCarrier ? selectedCarrier.baseRatePerKg : modeRateNumeric;
     const shippingCost = Math.floor(baseRate * weight);
 
     // 3) Mediator intermediate commission rate (Dynamic based on product base price / sale value)
@@ -528,12 +704,22 @@ export default function ClientDashboard({
     const selectedCarrierId = newOrderForm.preferredCarrierId || carriersList[0]?.id || '';
     const selectedCarrier = carriersList.find(c => c.id === selectedCarrierId);
 
+    const isCabindaToLuanda = newOrderForm.routeDirection === 'Cabinda-Luanda';
+    const originCity = isCabindaToLuanda ? 'Cabinda' : 'Luanda';
+    const destinationCity = isCabindaToLuanda ? 'Luanda' : 'Cabinda';
+
     const calc = getCalcDetails();
     const rawPrice = calcActive ? calc.rawPrice : (newOrderForm.quantity * 125000);
     const shippingCost = calcActive ? calc.shippingCost : getEstimatedFreight();
     const dutyFee = calcActive ? calc.dutyAmount : Math.floor(rawPrice * 0.05);
     const commFee = calcActive ? calc.commissionAmount : Math.floor(rawPrice * 0.12);
     const totalCost = calcActive ? calc.totalAmount : (rawPrice + shippingCost + dutyFee + commFee);
+
+    const defaultCarrierName = newOrderForm.transportMode === 'aereo' 
+      ? 'TAAG Cargo Express' 
+      : newOrderForm.transportMode === 'terrestre' 
+        ? 'Linhas Terrestres Nocebo' 
+        : 'Cabotagem Secil Marítima';
 
     const newOrder: Order = {
       id: newId,
@@ -560,7 +746,11 @@ export default function ClientDashboard({
 
       deliveryOption: newOrderForm.deliveryOption,
       deliveryAddress: newOrderForm.deliveryAddress,
-      shippingCarrier: selectedCarrier ? selectedCarrier.name : undefined,
+      shippingCarrier: selectedCarrier ? selectedCarrier.name : defaultCarrierName,
+      routeDirection: newOrderForm.routeDirection,
+      originCity,
+      destinationCity,
+      transportMode: newOrderForm.transportMode,
       status: 'RECEBIDO',
       pointsEarned: Math.floor(shippingCost / 100),
       createdAt: new Date().toISOString()
@@ -576,15 +766,17 @@ export default function ClientDashboard({
       quantity: 1,
       supplierName: '',
       supplierPhone: '',
-      supplierLocation: 'Luanda, Maculusso',
+      supplierLocation: isCabindaToLuanda ? 'Cabinda, Centro' : 'Luanda, Mercado dos Congolenses / São Paulo',
       notes: '',
       deliveryOption: 'escritorio',
       deliveryAddress: '',
-      preferredCarrierId: ''
+      preferredCarrierId: '',
+      routeDirection: 'Luanda-Cabinda',
+      transportMode: 'maritimo'
     });
     setTempPhotos([]);
 
-    speak(`Seu pedido de ${newOrder.productName} foi cadastrado com preferência de despacho pela ${newOrder.shippingCarrier || 'sua transportadora escolhida'}.`);
+    speak(`Seu pedido de ${newOrder.productName} na rota ${originCity} para ${destinationCity} foi registado com sucesso via ${newOrder.shippingCarrier}.`);
     setCurrentView('acompanhar-pedido');
   };
 
@@ -920,69 +1112,198 @@ export default function ClientDashboard({
 
       {/* 1) TELA INICIAL (ALIXPRESS STYLE ONLY PRODUCTS SHOWROOM) */}
       {currentView === 'inicio' && (
-        <div className="space-y-6 animate-fade-in" id="dashboard-home-tab">
+        <div className="space-y-5 animate-fade-in" id="dashboard-home-tab">
           
           {/* Banner */}
           <div className="bg-gradient-to-r from-amber-400 to-amber-500 rounded-3xl p-5 text-slate-950 relative overflow-hidden shadow-xs border border-amber-300">
             <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
             <div className="relative z-10 space-y-1">
               <span className="text-[8px] bg-slate-950 text-white font-extrabold px-2 py-0.5 rounded-full uppercase tracking-widest inline-block leading-none">
-                Mercadoria Autêntica
+                Vitrina Digital Oficial • Luanda ⇄ Cabinda
               </span>
               <h2 className="text-lg font-display font-black tracking-tight leading-none text-slate-950">
-                {selectedLocationFilter === 'all' 
-                  ? 'Vitrina Geral de Produtos (Luanda & Cabinda)' 
-                  : `Vitrina de Produtos — Origem ${selectedLocationFilter}`}
+                {marketSelectedCategory ? (
+                  <>Catálogo: {MARKETPLACE_CATEGORIES.find(c => c.id === marketSelectedCategory)?.name}</>
+                ) : selectedLocationFilter === 'all' ? (
+                  'Vitrina Geral de Produtos do Mediador'
+                ) : (
+                  `Vitrina de Produtos — Origem ${selectedLocationFilter}`
+                )}
               </h2>
               <p className="text-[10px] text-slate-900 font-medium leading-relaxed max-w-xl">
-                {selectedLocationFilter === 'Cabinda'
-                  ? 'Nós intermediamos a compra física e fiscal de mercadorias localizadas em Cabinda, organizando a guia aduaneira e entregando em Luanda.'
-                  : selectedLocationFilter === 'Luanda'
-                    ? 'Nós compramos por si física e fiscalmente em Luanda, elaboramos a guia aduaneira e entregamos em Cabinda com segurança total.'
-                    : 'A sua ponte comercial completa: compramos e despachamos mercadorias bidirecionalmente entre Luanda e Cabinda com isenção alfandegária.'}
+                {marketSelectedCategory === 'feminino'
+                  ? 'Perucas de cabelo 100% humano, vestidos de gala, malas e artigos femininos com envio seguro de Luanda para Cabinda.'
+                  : marketSelectedCategory === 'masculino'
+                    ? 'Fatos italianos slim fit, camisas de algodão egípcio, calçado clássico e acessórios para homem.'
+                    : marketSelectedCategory === 'eletronicos'
+                      ? 'Ar condicionados inverter, Smart TVs 4K, arcas frigoríficas, informática e eletrodomésticos com garantia.'
+                      : marketSelectedCategory === 'alimentos'
+                        ? 'Sacos de bombó seco de Cabinda, mandioca fresca da lavra, azeite puro do Maiombe e cereais do planalto.'
+                        : marketSelectedCategory === 'animais'
+                          ? 'Gado bovino vacinado, reprodutores bôer, galinhas caipiras e suínos com guia sanitária e transporte intermediado.'
+                          : 'A sua ponte comercial completa: compre com segurança e isenção fiscal entre Luanda e Cabinda com fatura e despacho garantido.'}
               </p>
             </div>
           </div>
 
-          {/* Search bar & Location Filter Buttons */}
+          {/* 🟢 PAINEL DE STATUS LOGÍSTICO & PRAZOS OFICIAIS SINCRONIZADOS */}
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                  Prazos Oficiais e Rotas em Vigor (Luanda ⇄ Cabinda)
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                Sincronizado da Direção
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-800">
+              <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-2.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-sky-800 tracking-wider block">✈️ Aéreo (TAAG)</span>
+                  <span className="text-xs font-black text-sky-950">{activeLogistics?.modes?.aereo?.averageTime || '1 dia'}</span>
+                </div>
+                <span className="text-[9px] font-mono font-bold text-sky-700">{activeLogistics?.modes?.aereo?.costEstimate || '2.500 Kz/Kg'}</span>
+              </div>
+
+              <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-2.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-amber-800 tracking-wider block">🚢 Marítimo (Cabotagem)</span>
+                  <span className="text-xs font-black text-amber-950">{activeLogistics?.modes?.maritimo?.averageTime || '2–3 dias'}</span>
+                </div>
+                <span className="text-[9px] font-mono font-bold text-amber-700">{activeLogistics?.modes?.maritimo?.costEstimate || '450 Kz/Kg'}</span>
+              </div>
+
+              <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider block">🚚 Terrestre (Rodoviário)</span>
+                  <span className="text-xs font-black text-emerald-950">{activeLogistics?.modes?.terrestre?.averageTime || '7–8 dias'}</span>
+                </div>
+                <span className="text-[9px] font-mono font-bold text-emerald-700">{activeLogistics?.modes?.terrestre?.costEstimate || '350 Kz/Kg'}</span>
+              </div>
+            </div>
+
+            {activeLogistics?.operationalNote && (
+              <p className="text-[10px] text-slate-600 bg-slate-50 rounded-xl p-2 border border-slate-100">
+                📢 <strong>Nota Operacional:</strong> {activeLogistics.operationalNote}
+              </p>
+            )}
+          </div>
+
+          {/* 🔍 Search bar with active category indicator */}
           <div className="space-y-3" id="product-feed-catalog-search">
-            <div className="relative">
-              <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={homeSearchQuery}
-                onChange={(e) => setHomeSearchQuery(e.target.value)}
-                placeholder="Pesquise por informática, geradores, cabos de cobre..."
-                className="w-full pl-11 pr-12 py-3 bg-white border border-slate-200 rounded-2xl shadow-xs text-xs font-semibold focus:outline-hidden focus:border-amber-400 focus:ring-0 text-slate-800 transition-colors"
-                id="catalog-product-search-input"
-              />
-              {homeSearchQuery && (
-                <button 
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={homeSearchQuery}
+                  onChange={(e) => setHomeSearchQuery(e.target.value)}
+                  placeholder={
+                    marketSelectedCategory
+                      ? `Pesquisar em ${MARKETPLACE_CATEGORIES.find(c => c.id === marketSelectedCategory)?.name}... (ex: peruca, fato, TV)`
+                      : "Pesquise por vestuário feminino, fatos, eletrónicos, bombó, bois, geradores..."
+                  }
+                  className="w-full pl-11 pr-20 py-3 bg-white border border-slate-200 rounded-2xl shadow-xs text-xs font-semibold focus:outline-hidden focus:border-amber-400 focus:ring-0 text-slate-800 transition-colors"
+                  id="catalog-product-search-input"
+                />
+                {homeSearchQuery && (
+                  <button 
+                    type="button"
+                    onClick={() => setHomeSearchQuery('')}
+                    className="absolute right-4 top-3.5 text-[10px] text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+
+              {/* Reset filter button if any active */}
+              {(marketSelectedCategory || homeSearchQuery || selectedLocationFilter !== 'all') && (
+                <button
                   type="button"
-                  onClick={() => setHomeSearchQuery('')}
-                  className="absolute right-4 top-3.5 text-[10px] text-slate-400 hover:text-slate-600 font-bold"
+                  onClick={() => {
+                    setMarketSelectedCategory('');
+                    setMarketSelectedSubCategory('');
+                    setHomeSearchQuery('');
+                    setSelectedLocationFilter('all');
+                    speak("Todos os filtros foram reiniciados.");
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
                 >
-                  Limpar
+                  <X className="w-3.5 h-3.5" />
+                  <span>Limpar Filtros</span>
                 </button>
               )}
             </div>
 
-            {/* Quick Location Tabs */}
-            <div className="flex gap-2 items-center overflow-x-auto pb-1 scrollbar-thin">
-              <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">Filtrar Origem:</span>
+            {/* 🏷️ HORIZONTAL CATEGORY NAVIGATION BAR (All categories: Feminino, Masculino, Eletrónicos, Alimentos, Animais, etc.) */}
+            <div className="pt-1">
+              <div className="flex items-center justify-between pb-1.5 px-0.5">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" />
+                  Navegar por Categorias & Subcategorias
+                </span>
+                {marketSelectedCategory && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMarketSelectedCategory('');
+                      setMarketSelectedSubCategory('');
+                    }}
+                    className="text-[10px] text-amber-700 hover:underline font-bold cursor-pointer"
+                  >
+                    ✕ Ver Todas
+                  </button>
+                )}
+              </div>
+
+              <MarketplaceCategoryNav
+                variant="horizontal"
+                selectedCategory={marketSelectedCategory}
+                selectedSubCategory={marketSelectedSubCategory}
+                products={supplierProducts}
+                onSelectCategory={(catId) => {
+                  setMarketSelectedCategory(catId);
+                  setMarketSelectedSubCategory('');
+                  if (catId) {
+                    const catName = MARKETPLACE_CATEGORIES.find(c => c.id === catId)?.name;
+                    speak(`Filtrando categoria: ${catName}`);
+                  } else {
+                    speak("Exibindo todas as categorias");
+                  }
+                }}
+                onSelectSubCategory={(subId) => {
+                  setMarketSelectedSubCategory(subId);
+                  if (subId) {
+                    speak("Subcategoria aplicada");
+                  }
+                }}
+              />
+            </div>
+
+            {/* 📍 Quick Location Filter Tabs (Todos, Luanda, Cabinda, Huíla) */}
+            <div className="flex gap-2 items-center overflow-x-auto pb-1 scrollbar-thin pt-1 border-t border-slate-100">
+              <span className="text-[9px] font-bold text-slate-400 uppercase shrink-0">Origem da Carga:</span>
               <button
                 type="button"
                 onClick={() => {
                   setSelectedLocationFilter('all');
-                  speak("Exibindo todos os produtos de Luanda e Cabinda");
+                  speak("Exibindo todas as províncias");
                 }}
                 className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
                   selectedLocationFilter === 'all' 
-                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    ? 'bg-slate-900 text-amber-400 border border-slate-900 shadow-xs' 
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                🌍 Todos ({supplierProducts.filter(p => p.published).length})
+                🌍 Todas Províncias ({supplierProducts.filter(p => p.published).length})
               </button>
               <button
                 type="button"
@@ -992,7 +1313,7 @@ export default function ClientDashboard({
                 }}
                 className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
                   selectedLocationFilter === 'Luanda' 
-                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs font-black' 
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
@@ -1006,7 +1327,7 @@ export default function ClientDashboard({
                 }}
                 className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all shrink-0 cursor-pointer ${
                   selectedLocationFilter === 'Cabinda' 
-                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs' 
+                    ? 'bg-amber-400 text-slate-950 border border-amber-400 shadow-xs font-black' 
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
@@ -1017,115 +1338,182 @@ export default function ClientDashboard({
 
           {/* Products Grid */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <span className="text-[9px] uppercase font-bold text-slate-400 font-sans tracking-wider">Catálogo Público</span>
-              <span className="text-[10px] text-slate-500 font-bold font-mono">
-                {supplierProducts.filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length} itens
-              </span>
-            </div>
+            {(() => {
+              const filteredCatalogProducts = supplierProducts
+                .filter(p => {
+                  if (!p.published) return false;
+                  if (selectedLocationFilter !== 'all' && (p.location || 'Luanda') !== selectedLocationFilter) return false;
+                  if (marketSelectedCategory && p.category !== marketSelectedCategory) return false;
+                  if (marketSelectedSubCategory && p.subCategory !== marketSelectedSubCategory) return false;
+                  if (homeSearchQuery.trim()) {
+                    const q = homeSearchQuery.toLowerCase();
+                    const matchName = p.name.toLowerCase().includes(q);
+                    const matchDesc = (p.description || '').toLowerCase().includes(q);
+                    const matchCode = (p.productCode || '').toLowerCase().includes(q);
+                    const matchTags = (p.tags || []).some(t => t.toLowerCase().includes(q));
+                    const matchLocation = (p.location || '').toLowerCase().includes(q);
+                    if (!matchName && !matchDesc && !matchCode && !matchTags && !matchLocation) return false;
+                  }
+                  return true;
+                })
+                .sort((a, b) => (b.sponsored ? 1 : 0) - (a.sponsored ? 1 : 0));
 
-            {supplierProducts.filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()))).length === 0 ? (
-              <div className="text-center py-12 bg-white border border-slate-150 rounded-3xl p-6">
-                <span className="text-2xl block mb-2">🔍</span>
-                <p className="text-xs font-bold text-slate-800">Sem correspondências.</p>
-                <p className="text-[10px] text-slate-405 mt-1">Insira outro termo de procura.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4" id="products-catalog-continuous-feed">
-                {supplierProducts
-                  .filter(p => p.published && (selectedLocationFilter === 'all' || (p.location || 'Luanda') === selectedLocationFilter) && (!homeSearchQuery.trim() || p.name.toLowerCase().includes(homeSearchQuery.toLowerCase()) || (p.description || '').toLowerCase().includes(homeSearchQuery.toLowerCase())))
-                  .sort((a, b) => (b.sponsored ? 1 : 0) - (a.sponsored ? 1 : 0))
-                  .map((prod) => {
-                    const isEsgotado = prod.availability === 'esgotado' || prod.stock === 0;
-                    const prodSupplier = suppliers.find(s => s.id === prod.supplierId);
-                    
-                    return (
-                      <div 
-                        key={prod.id}
+              return (
+                <>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 font-sans tracking-wider">
+                        {marketSelectedCategory ? (
+                          <>Resultados em <strong className="text-slate-800">{MARKETPLACE_CATEGORIES.find(c => c.id === marketSelectedCategory)?.name}</strong></>
+                        ) : 'Vitrina Aberta'}
+                      </span>
+                      {marketSelectedSubCategory && (
+                        <span className="text-[9px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md">
+                          {MARKETPLACE_CATEGORIES.find(c => c.id === marketSelectedCategory)?.subCategories.find(s => s.id === marketSelectedSubCategory)?.name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-bold font-mono">
+                      {filteredCatalogProducts.length} artigos encontrados
+                    </span>
+                  </div>
+
+                  {filteredCatalogProducts.length === 0 ? (
+                    <div className="text-center py-12 bg-white border border-slate-150 rounded-3xl p-6 space-y-3">
+                      <span className="text-3xl block">🔍</span>
+                      <p className="text-sm font-bold text-slate-800">Nenhum produto encontrado nesta categoria ou pesquisa.</p>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Tente escolher outra categoria na barra horizontal acima ou limpe o termo de busca.
+                      </p>
+                      <button
+                        type="button"
                         onClick={() => {
-                          setSelectedProduct(prod);
-                          speak(`Visualizando ${prod.name}`);
+                          setMarketSelectedCategory('');
+                          setMarketSelectedSubCategory('');
+                          setHomeSearchQuery('');
+                          setSelectedLocationFilter('all');
                         }}
-                        className="bg-white border border-slate-150 rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between group h-full cursor-pointer relative"
-                        id={`product-card-${prod.id}`}
+                        className="px-4 py-2 bg-amber-400 text-slate-950 rounded-xl text-xs font-black hover:bg-amber-500 transition-colors cursor-pointer"
                       >
-                        {/* Image aspect relative */}
-                        <div className="relative aspect-square bg-slate-50 overflow-hidden shrink-0 border-b border-slate-100">
-                          {prod.photoUrl ? (
-                            <img 
-                              src={prod.photoUrl} 
-                              alt={prod.name} 
-                              className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-350"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xs">
-                              Sem Foto
-                            </div>
-                          )}
+                        Ver Todos os Produtos
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="products-catalog-continuous-feed">
+                      {filteredCatalogProducts.map((prod) => {
+                        const isEsgotado = prod.availability === 'esgotado' || prod.stock === 0;
+                        const prodSupplier = suppliers.find(s => s.id === prod.supplierId);
+                        const categoryMeta = MARKETPLACE_CATEGORIES.find(c => c.id === prod.category);
+                        
+                        return (
+                          <div 
+                            key={prod.id}
+                            onClick={() => {
+                              setSelectedProduct(prod);
+                              speak(`Visualizando ${prod.name}`);
+                            }}
+                            className="bg-white border border-slate-150 rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between group h-full cursor-pointer relative"
+                            id={`product-card-${prod.id}`}
+                          >
+                            {/* Image aspect relative */}
+                            <div className="relative aspect-square bg-slate-50 overflow-hidden shrink-0 border-b border-slate-100">
+                              {prod.photoUrl ? (
+                                <img 
+                                  src={prod.photoUrl} 
+                                  alt={prod.name} 
+                                  className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-350"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xs">
+                                  Sem Foto
+                                </div>
+                              )}
 
-                          {prod.sponsored && (
-                            <div className="absolute top-2 left-2">
-                              <span className="bg-amber-400 text-slate-950 font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
-                                Destaque
-                              </span>
-                            </div>
-                          )}
+                              {prod.sponsored && (
+                                <div className="absolute top-2 left-2">
+                                  <span className="bg-amber-400 text-slate-950 font-black text-[7.5px] px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                                    ★ Destaque
+                                  </span>
+                                </div>
+                              )}
 
-                          <div className="absolute top-2 right-2">
-                            {isEsgotado ? (
-                              <span className="bg-red-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                                Esgotado
-                              </span>
-                            ) : prod.availability === 'sob-pedido' ? (
-                              <span className="bg-blue-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                                Pedido
-                              </span>
-                            ) : (
-                              <span className="bg-emerald-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse-subtle">
-                                Em Stock
-                              </span>
-                            )}
+                              <div className="absolute top-2 right-2">
+                                {isEsgotado ? (
+                                  <span className="bg-red-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                                    Esgotado
+                                  </span>
+                                ) : prod.availability === 'sob-pedido' ? (
+                                  <span className="bg-blue-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                                    Pedido
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse-subtle">
+                                    Em Stock
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Category icon indicator badge */}
+                              {categoryMeta && (
+                                <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur-xs text-white text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                  <span>{categoryMeta.icon}</span>
+                                  <span className="truncate max-w-[80px]">{categoryMeta.name}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Description Context */}
+                            <div className="p-3 flex-1 flex flex-col justify-between space-y-2 text-xs">
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                  <span className="bg-amber-100/90 text-amber-900 text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded-md border border-amber-200/80 shadow-2xs">
+                                    🏷️ {getProductCode(prod)}
+                                  </span>
+                                  <span className="text-[9px] text-slate-500 font-bold truncate">
+                                    📍 {prod.location || 'Luanda'}
+                                  </span>
+                                </div>
+                                <h4 className="font-extrabold text-[11px] text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-2 leading-tight">
+                                  {prod.name}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 font-medium truncate mt-1">
+                                  Fornecedor: <span className="font-semibold text-slate-650">{prodSupplier?.name || 'Parceiro Homologado'}</span>
+                                </p>
+
+                                {/* Tags preview */}
+                                {prod.tags && prod.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {prod.tags.slice(0, 2).map((t, idx) => (
+                                      <span key={idx} className="text-[8px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-medium truncate max-w-[120px]">
+                                        {t}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                                <div>
+                                  <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block">Preço</span>
+                                  <span className="font-mono text-xs font-black text-slate-900">
+                                    {prod.price.toLocaleString('pt-AO')} Kz
+                                  </span>
+                                </div>
+
+                                <span className="text-[9px] font-black text-amber-900 bg-amber-200/90 group-hover:bg-amber-400 px-2 py-1 rounded-lg transition-colors flex items-center gap-0.5 shadow-2xs">
+                                  Ver Detalhes ⚡
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-
-                        {/* Description Context */}
-                        <div className="p-3 flex-1 flex flex-col justify-between space-y-2 text-xs">
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              <span className="bg-amber-100/90 text-amber-900 text-[8.5px] font-mono font-black px-1.5 py-0.5 rounded-md border border-amber-200/80 shadow-2xs">
-                                🏷️ {getProductCode(prod)}
-                              </span>
-                              <span className="text-[9px] text-slate-400 font-bold truncate">
-                                📍 {prod.location || 'Luanda'}
-                              </span>
-                            </div>
-                            <h4 className="font-extrabold text-[11px] text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-2 leading-tight">
-                              {prod.name}
-                            </h4>
-                            <p className="text-[10px] text-slate-400 font-medium truncate mt-1">
-                              Empresa: <span className="font-semibold text-slate-650">{prodSupplier?.name || 'Parceiro'}</span>
-                            </p>
-                          </div>
-
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                            <div>
-                              <span className="text-[8px] text-slate-400 font-black uppercase tracking-wider block">Preço</span>
-                              <span className="font-mono text-xs font-black text-slate-900">
-                                {prod.price.toLocaleString('pt-AO')} Kz
-                              </span>
-                            </div>
-
-                            <span className="text-[9px] font-black text-amber-900 bg-amber-200/90 group-hover:bg-amber-400 px-2 py-1 rounded-lg transition-colors flex items-center gap-0.5 shadow-2xs">
-                              Opções ⚡
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1139,11 +1527,190 @@ export default function ClientDashboard({
             </div>
             <div>
               <h3 className="text-lg font-bold font-display text-slate-900">Solicitar Nova Compra / Encomenda</h3>
-              <p className="text-xs text-slate-500 font-medium">Basta descrever o produto. Localizamos nas maiores lojas físicas fiscais de Luanda.</p>
+              <p className="text-xs text-slate-500 font-medium">Basta descrever o produto. Localizamos nas maiores lojas físicas fiscais e despachamos com segurança.</p>
             </div>
           </div>
 
           <form onSubmit={handleCreateOrder} className="space-y-5">
+            {/* 1. SELETOR DE ROTA BIDIRECIONAL (LUANDA ➔ CABINDA OU CABINDA ➔ LUANDA) */}
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                  <span>🔄</span> Sentido do Transporte / Rota de Carga *
+                </span>
+                <span className="text-[9px] bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded-full">
+                  Bidirecional Oficial
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOrderForm({
+                      ...newOrderForm,
+                      routeDirection: 'Luanda-Cabinda',
+                      supplierLocation: 'Luanda, Mercado dos Congolenses / São Paulo'
+                    });
+                    speak("Rota selecionada: Luanda para Cabinda.");
+                  }}
+                  className={`p-3 rounded-xl text-left border transition-all cursor-pointer ${
+                    newOrderForm.routeDirection === 'Luanda-Cabinda'
+                      ? 'bg-white border-amber-500 shadow-xs ring-2 ring-amber-300'
+                      : 'bg-white/60 border-slate-200 hover:bg-white text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>📦</span> Luanda ➔ Cabinda
+                    </span>
+                    {newOrderForm.routeDirection === 'Luanda-Cabinda' && (
+                      <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-1.5 py-0.2 rounded-full">Ativo ✓</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Compras e artigos adquiridos em Luanda enviados para o Armazém C-4 / Domicílio em Cabinda.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOrderForm({
+                      ...newOrderForm,
+                      routeDirection: 'Cabinda-Luanda',
+                      supplierLocation: 'Cabinda, Centro / Armazém C-4'
+                    });
+                    speak("Rota selecionada: Cabinda para Luanda.");
+                  }}
+                  className={`p-3 rounded-xl text-left border transition-all cursor-pointer ${
+                    newOrderForm.routeDirection === 'Cabinda-Luanda'
+                      ? 'bg-white border-amber-500 shadow-xs ring-2 ring-amber-300'
+                      : 'bg-white/60 border-slate-200 hover:bg-white text-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>📤</span> Cabinda ➔ Luanda
+                    </span>
+                    {newOrderForm.routeDirection === 'Cabinda-Luanda' && (
+                      <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-1.5 py-0.2 rounded-full">Ativo ✓</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Mercadorias, produtos locais ou encomendas de Cabinda enviadas para clientes em Luanda.
+                  </p>
+                </button>
+              </div>
+
+              {/* Informação Operacional da Rota Ativa */}
+              <div className="bg-white/80 rounded-xl p-2.5 text-[10px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border border-amber-100">
+                <span>
+                  <strong>Origem:</strong> {newOrderForm.routeDirection === 'Cabinda-Luanda' ? 'Cabinda (Armazém C-4 / Fornecedores Locais)' : 'Luanda (Mercados / Lojas da Capital)'}
+                </span>
+                <span>➔</span>
+                <span>
+                  <strong>Destino:</strong> {newOrderForm.routeDirection === 'Cabinda-Luanda' ? 'Luanda (' + (activeLogistics?.consolidationAddressLuanda || 'Parque Logístico / Viana') + ')' : 'Cabinda (' + (activeLogistics?.pickupAddressCabinda || 'Armazém C-4, Porto de Cabinda') + ')'}
+                </span>
+              </div>
+            </div>
+
+            {/* 2. ESCOLHA DA MODALIDADE DE TRANSPORTE DINÂMICA */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-800">
+                  Modalidade de Transporte & Prazos Oficiais em Vigor *
+                </label>
+                <span className="text-[9px] text-slate-400 font-bold">Atualizado pela Direção Logística</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* AÉREO */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOrderForm({ ...newOrderForm, transportMode: 'aereo' });
+                    speak(`Modalidade selecionada: Aérea. Prazo médio de ${activeLogistics?.modes?.aereo?.averageTime || '1 dia'}.`);
+                  }}
+                  className={`p-3 rounded-2xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                    newOrderForm.transportMode === 'aereo'
+                      ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-200'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                      <span>✈️</span> Via Aérea
+                    </span>
+                    <span className="text-[8px] bg-sky-100 text-sky-800 font-black px-1.5 py-0.5 rounded-md uppercase">Express</span>
+                  </div>
+                  <p className="text-[11px] font-black text-sky-900 mt-1">
+                    Prazo: {activeLogistics?.modes?.aereo?.averageTime || '1 dia'}
+                  </p>
+                  <div className="flex justify-between items-center text-[9px] text-slate-500 border-t border-slate-100 pt-1.5 mt-2">
+                    <span>Estimativa: {activeLogistics?.modes?.aereo?.costEstimate || '2.500 Kz/Kg'}</span>
+                    <span className="text-emerald-700 font-bold">{activeLogistics?.modes?.aereo?.status || 'Ativo'}</span>
+                  </div>
+                </button>
+
+                {/* MARÍTIMO */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOrderForm({ ...newOrderForm, transportMode: 'maritimo' });
+                    speak(`Modalidade selecionada: Marítima. Prazo médio de ${activeLogistics?.modes?.maritimo?.averageTime || '2 a 3 dias'}.`);
+                  }}
+                  className={`p-3 rounded-2xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                    newOrderForm.transportMode === 'maritimo'
+                      ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-200'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                      <span>🚢</span> Via Marítima
+                    </span>
+                    <span className="text-[8px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.5 rounded-md uppercase">Económica</span>
+                  </div>
+                  <p className="text-[11px] font-black text-amber-900 mt-1">
+                    Prazo: {activeLogistics?.modes?.maritimo?.averageTime || '2–3 dias'}
+                  </p>
+                  <div className="flex justify-between items-center text-[9px] text-slate-500 border-t border-slate-100 pt-1.5 mt-2">
+                    <span>Estimativa: {activeLogistics?.modes?.maritimo?.costEstimate || '450 Kz/Kg'}</span>
+                    <span className="text-emerald-700 font-bold">{activeLogistics?.modes?.maritimo?.status || 'Ativo'}</span>
+                  </div>
+                </button>
+
+                {/* TERRESTRE */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewOrderForm({ ...newOrderForm, transportMode: 'terrestre' });
+                    speak(`Modalidade selecionada: Terrestre. Prazo médio de ${activeLogistics?.modes?.terrestre?.averageTime || '7 a 8 dias'}.`);
+                  }}
+                  className={`p-3 rounded-2xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                    newOrderForm.transportMode === 'terrestre'
+                      ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-200'
+                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900 flex items-center gap-1">
+                      <span>🚚</span> Via Terrestre
+                    </span>
+                    <span className="text-[8px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded-md uppercase">Rodoviário</span>
+                  </div>
+                  <p className="text-[11px] font-black text-emerald-900 mt-1">
+                    Prazo: {activeLogistics?.modes?.terrestre?.averageTime || '7–8 dias'}
+                  </p>
+                  <div className="flex justify-between items-center text-[9px] text-slate-500 border-t border-slate-100 pt-1.5 mt-2">
+                    <span>Estimativa: {activeLogistics?.modes?.terrestre?.costEstimate || '350 Kz/Kg'}</span>
+                    <span className="text-emerald-700 font-bold">{activeLogistics?.modes?.terrestre?.status || 'Ativo'}</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-705 mb-1.5">Qual o Equipamento / Artigo que Deseja? *</label>
@@ -1151,7 +1718,7 @@ export default function ClientDashboard({
                   type="text"
                   value={newOrderForm.productName}
                   onChange={(e) => setNewOrderForm({ ...newOrderForm, productName: e.target.value })}
-                  placeholder="Ex: Gerador 5KVA a Gasóleo Toyama ou Computador Portátil Lenovo"
+                  placeholder={newOrderForm.routeDirection === 'Cabinda-Luanda' ? "Ex: Sacos de Peixe Seco de Cacongo, Artesanato ou Madeira" : "Ex: Gerador 5KVA a Gasóleo Toyama ou Computador Portátil Lenovo"}
                   className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-amber-500"
                   required
                 />
@@ -1179,37 +1746,38 @@ export default function ClientDashboard({
                 <label className="block text-xs font-bold text-slate-705 mb-1.5">Previsão Estimada de Trânsito</label>
                 <div className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono flex items-center justify-between text-slate-700">
                   <span className="font-bold text-slate-800">{formatCurrency(getEstimatedFreight())}</span>
-                  <span className="text-[10px] text-slate-400">Freight Médio Estimado</span>
+                  <span className="text-[10px] text-slate-400">
+                    {newOrderForm.transportMode === 'aereo' ? 'Aéreo Express' : newOrderForm.transportMode === 'terrestre' ? 'Terrestre' : 'Marítimo'} ({newOrderForm.quantity} un.)
+                  </span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-705 mb-1.5">Localização Física do Fornecedor (Origem) *</label>
-                <select
-                  value={newOrderForm.supplierLocation}
-                  onChange={(e) => setNewOrderForm({ ...newOrderForm, supplierLocation: e.target.value })}
-                  className="w-full text-xs p-3 border border-slate-200 rounded-xl bg-white focus:outline-hidden text-slate-800 font-bold"
-                  required
-                >
-                  <option value="Luanda, Maculusso">Luanda (📍 Enviar para Cabinda)</option>
-                  <option value="Cabinda, Centro">Cabinda (📍 Enviar para Luanda)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-705 mb-1.5">Fornecedor Sugerido (Se souber)</label>
+                <label className="block text-xs font-bold text-slate-705 mb-1.5">Localização Física do Fornecedor / Origem *</label>
                 <input
                   type="text"
-                  value={newOrderForm.supplierName}
-                  onChange={(e) => setNewOrderForm({ ...newOrderForm, supplierName: e.target.value })}
-                  placeholder="Ex: Robert Hudson Maculusso ou Sem Preferência"
-                  className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-hidden"
+                  value={newOrderForm.supplierLocation}
+                  onChange={(e) => setNewOrderForm({ ...newOrderForm, supplierLocation: e.target.value })}
+                  placeholder={newOrderForm.routeDirection === 'Cabinda-Luanda' ? "Ex: Cabinda, Bairro Lândana / Cacongo" : "Ex: Luanda, Mercado dos Congolenses / São Paulo / Viana"}
+                  className="w-full text-xs p-3 border border-slate-200 rounded-xl bg-white focus:outline-hidden text-slate-800 font-bold"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-705 mb-1.5">Telefone de Contacto do Fornecedor</label>
+                <label className="block text-xs font-bold text-slate-705 mb-1.5">Fornecedor / Remetente Sugerido (Se souber)</label>
+                <input
+                  type="text"
+                  value={newOrderForm.supplierName}
+                  onChange={(e) => setNewOrderForm({ ...newOrderForm, supplierName: e.target.value })}
+                  placeholder={newOrderForm.routeDirection === 'Cabinda-Luanda' ? "Ex: Produtor Local de Cabinda ou Sem Preferência" : "Ex: Robert Hudson Maculusso ou Sem Preferência"}
+                  className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-hidden"
+                  required
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-705 mb-1.5">Telefone de Contacto do Fornecedor / Remetente</label>
                 <input
                   type="text"
                   value={newOrderForm.supplierPhone}
@@ -1226,7 +1794,9 @@ export default function ClientDashboard({
                     <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
                       <span>🧮</span> Estimador Orçamental e Fiscal (AGT)
                     </h4>
-                    <p className="text-[10px] text-slate-500 font-medium">Calcule de antemão tarifas aduaneiras e lucros de transporte para Cabinda</p>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      Tarifas aduaneiras AGT ({activeLogistics?.customsTaxAGT || '5%–8%'}) e comissão ({activeLogistics?.intermediationFeeRate || '12%'})
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -1248,7 +1818,7 @@ export default function ClientDashboard({
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 text-xs animate-scale-up text-left">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Preço em Luanda (Kz)</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Preço Base do Artigo (Kz)</label>
                         <input
                           type="number"
                           step="1000"
@@ -1259,7 +1829,7 @@ export default function ClientDashboard({
                           }}
                           className="w-full text-xs p-2.5 border bg-white rounded-lg focus:outline-hidden"
                         />
-                        <span className="text-[9px] text-slate-400 mt-1 block">Preço base de loja</span>
+                        <span className="text-[9px] text-slate-400 mt-1 block">Valor faturado</span>
                       </div>
 
                       <div>
@@ -1273,7 +1843,7 @@ export default function ClientDashboard({
                           }}
                           className="w-full text-xs p-2.5 border bg-white rounded-lg focus:outline-hidden"
                         />
-                        <span className="text-[9px] text-slate-400 mt-1 block">Utilizado no frete</span>
+                        <span className="text-[9px] text-slate-400 mt-1 block">Para cálculo do frete</span>
                       </div>
 
                       <div>
@@ -1299,12 +1869,14 @@ export default function ClientDashboard({
                         <div className="bg-white border rounded-xl p-3.5 space-y-2.5">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-1.5 flex justify-between items-center">
                             <span>Demonstração de Custos Estimados</span>
-                            <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded-sm font-bold capitalize">Preço Estimativo</span>
+                            <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded-sm font-bold capitalize">
+                              {newOrderForm.transportMode === 'aereo' ? 'Via Aérea' : newOrderForm.transportMode === 'terrestre' ? 'Via Terrestre' : 'Via Marítima'}
+                            </span>
                           </p>
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-800">
                             <div className="p-2.5 bg-slate-50/50 rounded-lg">
-                              <span className="text-[8px] text-slate-400 font-bold block uppercase">Base Luanda</span>
+                              <span className="text-[8px] text-slate-400 font-bold block uppercase">Valor Artigo</span>
                               <span className="font-mono font-bold text-[11px] text-slate-800">{formatCurrency(breakdown.rawPrice)}</span>
                             </div>
                             <div className="p-2.5 bg-slate-50/50 rounded-lg">
@@ -1312,7 +1884,7 @@ export default function ClientDashboard({
                               <span className="font-mono font-bold text-[11px] text-slate-800">{formatCurrency(breakdown.dutyAmount)}</span>
                             </div>
                             <div className="p-2.5 bg-slate-50/50 rounded-lg">
-                              <span className="text-[8px] text-slate-400 font-bold block uppercase">Frete Marítimo</span>
+                              <span className="text-[8px] text-slate-400 font-bold block uppercase">Frete ({newOrderForm.transportMode})</span>
                               <span className="font-mono font-bold text-[11px] text-slate-800">{formatCurrency(breakdown.shippingCost)}</span>
                             </div>
                             <div className="p-2.5 bg-slate-50/50 rounded-lg">
@@ -1324,10 +1896,18 @@ export default function ClientDashboard({
                           <div className="pt-2 border-t flex justify-between items-center text-slate-900">
                             <div>
                               <p className="font-extrabold text-[11px] text-slate-905">Total Estimado Chave na Mão</p>
-                              <p className="text-[9px] text-emerald-600 font-semibold">Inclui desembaraço e transporte geral até Cabinda</p>
+                              <p className="text-[9px] text-emerald-600 font-semibold">
+                                {newOrderForm.routeDirection === 'Cabinda-Luanda' ? 'Entrega segura em Luanda com Guia AGT' : 'Entrega no Armazém C-4 / Domicílio em Cabinda'}
+                              </p>
                             </div>
                             <span className="font-mono text-base font-black text-amber-700">{formatCurrency(breakdown.totalAmount)}</span>
                           </div>
+
+                          {activeLogistics?.operationalNote && (
+                            <div className="p-2 bg-amber-50 rounded-lg text-[9px] text-amber-900 font-medium border border-amber-200">
+                              📢 <strong>Nota de Gestão:</strong> {activeLogistics.operationalNote}
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -1335,18 +1915,23 @@ export default function ClientDashboard({
                 )}
               </div>
 
-              {/* DYNAMIC DISPATCHERS SECTOR - REQUIREMENT 2 */}
+              {/* DYNAMIC DISPATCHERS SECTOR */}
               <div className="sm:col-span-2 space-y-2">
-                <label className="block text-xs font-bold text-slate-705">Escolha a Empresa de Despacho / Transportadora Marítima ou Aérea de sua preferência *</label>
+                <label className="block text-xs font-bold text-slate-705">
+                  Escolha a Empresa de Despacho / Transportadora Parceira de sua preferência *
+                </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" id="client-carrier-selector">
                   {carriersList.map((c) => {
                     const isSelected = (newOrderForm.preferredCarrierId || carriersList[0]?.id) === c.id;
+                    const modeKey = (c.mode || 'maritimo') as 'maritimo' | 'aereo' | 'terrestre';
+                    const dynamicModeTime = activeLogistics?.modes?.[modeKey]?.averageTime || `${c.expectedDays} dias`;
+                    
                     return (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => {
-                          setNewOrderForm({ ...newOrderForm, preferredCarrierId: c.id });
+                          setNewOrderForm({ ...newOrderForm, preferredCarrierId: c.id, transportMode: modeKey });
                           speak(`Selecionou ${c.name} para despacho.`);
                         }}
                         className={`p-3.5 rounded-2xl text-left transition-all border flex flex-col justify-between cursor-pointer group ${
@@ -1361,12 +1946,17 @@ export default function ClientDashboard({
                             <span className={`p-1.5 rounded-lg shrink-0 ${isSelected ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
                               <Truck className="w-3.5 h-3.5" />
                             </span>
-                            <span className="text-xs font-bold text-slate-800">{c.name}</span>
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 block">{c.name}</span>
+                              <span className="text-[8px] text-slate-400 uppercase font-black">
+                                {c.mode === 'aereo' ? '✈️ Aéreo' : c.mode === 'terrestre' ? '🚚 Rodoviário' : '🚢 Marítimo'}
+                              </span>
+                            </div>
                           </div>
                           {isSelected && <span className="bg-amber-500 text-slate-950 font-black text-[10px] w-4 h-4 flex items-center justify-center rounded-full">✓</span>}
                         </div>
                         <p className="text-[10px] text-slate-400 mt-2.5 flex justify-between w-full border-t border-slate-50 pt-1.5">
-                          <span>Trânsito Médio: <strong>{c.expectedDays} {c.expectedDays === 1 ? 'dia' : 'dias'}</strong></span>
+                          <span>Trânsito Oficial: <strong className="text-slate-700">{dynamicModeTime}</strong></span>
                           <span className="font-mono text-slate-600 font-semibold">{formatCurrency(c.baseRatePerKg)}/Kg</span>
                         </p>
                       </button>
@@ -1848,6 +2438,17 @@ export default function ClientDashboard({
                           {getStatusLabelAndColor(activeOrder.status)?.label}
                         </span>
 
+                        <span className="text-[9px] bg-amber-100 text-amber-900 border border-amber-300 font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span>🔄</span>
+                          {activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Cabinda ➔ Luanda' : 'Luanda ➔ Cabinda'}
+                        </span>
+
+                        {activeOrder.transportMode && (
+                          <span className="text-[9px] bg-slate-100 text-slate-800 border border-slate-200 font-bold px-2 py-0.5 rounded-full">
+                            {activeOrder.transportMode === 'aereo' ? '✈️ Aéreo Express' : activeOrder.transportMode === 'terrestre' ? '🚚 Rodoviário' : '🚢 Cabotagem Marítima'}
+                          </span>
+                        )}
+
                         {activeOrder.shippingGuideNumber && (
                           <span className="text-[9px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-full font-bold">
                             Guia AGT: {activeOrder.shippingGuideNumber}
@@ -1855,7 +2456,11 @@ export default function ClientDashboard({
                         )}
                       </div>
                       <h4 className="text-sm font-bold text-slate-900 mt-1.5">{activeOrder.productName}</h4>
-                      <p className="text-[10px] text-slate-500">Fornecedor Luanda: {activeOrder.supplierName}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {activeOrder.routeDirection === 'Cabinda-Luanda' 
+                          ? `Remetente Cabinda: ${activeOrder.supplierName} (${activeOrder.originCity || 'Cabinda'})` 
+                          : `Fornecedor Luanda: ${activeOrder.supplierName} (${activeOrder.originCity || 'Luanda'})`}
+                      </p>
                     </div>
 
                     <div className="text-right">
@@ -2437,27 +3042,41 @@ export default function ClientDashboard({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">Província *</label>
-                    <select
+                    <input
+                      type="text"
+                      list="cd-provinces-list"
                       value={signupForm.province}
-                      onChange={(e) => setSignupForm({ ...signupForm, province: e.target.value, municipality: MUNICIPALITIES[e.target.value]?.[0] || '' })}
-                      className="w-full p-2.5 border rounded-xl bg-white"
-                    >
+                      onChange={(e) => setSignupForm({ ...signupForm, province: e.target.value })}
+                      placeholder="Escreva a província (ex: Cabinda, Luanda...)"
+                      className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold"
+                      required
+                    />
+                    <datalist id="cd-provinces-list">
                       {PROVINCES_OF_ANGOLA.map(p => (
-                        <option key={p} value={p}>{p}</option>
+                        <option key={p} value={p} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Município *</label>
-                    <select
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Município / Comuna *</label>
+                    <input
+                      type="text"
+                      list="cd-municipalities-list"
                       value={signupForm.municipality}
                       onChange={(e) => setSignupForm({ ...signupForm, municipality: e.target.value })}
-                      className="w-full p-2.5 border rounded-xl bg-white"
-                    >
-                      {(MUNICIPALITIES[signupForm.province] || ['Sede']).map(m => (
-                        <option key={m} value={m}>{m}</option>
+                      placeholder="Escreva o município (ex: Cabinda, Cazenga...)"
+                      className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold"
+                      required
+                    />
+                    <datalist id="cd-municipalities-list">
+                      {(MUNICIPALITIES[signupForm.province] || [
+                        'Cabinda (Sede)', 'Cacongo', 'Buco-Zau', 'Belize',
+                        'Luanda', 'Cazenga', 'Viana', 'Belas', 'Cacuaco', 'Talatona', 'Kilamba Kiaxi',
+                        'Benguela', 'Lobito', 'Huambo', 'Lubango', 'Uíge', 'Malanje', 'Soyo'
+                      ]).map(m => (
+                        <option key={m} value={m} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">Bairro *</label>
@@ -3868,321 +4487,304 @@ export default function ClientDashboard({
         </div>
       )}
 
-      {/* 15) MERCADO DE FORNECEDORES (SUPPLIERS MARKETPLACE) */}
+      {/* 15) MERCADO DE FORNECEDORES (MARKETPLACE MODERNO PADRÃO ALIEXPRESS) */}
       {currentView === 'mercado-fornecedores' && (
-        <div className="space-y-6 max-w-6xl mx-auto animate-fade-in" id="mercado-fornecedores-screen">
-          
-          {/* Header Banner - Intermediation mandatory */}
-          <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-lg border border-slate-800">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl"></div>
-            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-500/10 rounded-full blur-2xl"></div>
-            
-            <div className="relative z-10 space-y-3">
-              <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest inline-flex items-center gap-1.5 shadow-sm">
-                <Shield className="w-3 h-3 text-slate-950" /> Intermediação Segura Obrigatória
-              </span>
-              <h2 className="font-display font-black text-xl sm:text-2xl tracking-tight text-white">Mercado de Fornecedores Parceiros</h2>
-              <p className="text-xs text-slate-350 max-w-2xl font-medium leading-relaxed">
-                Explore produtos homologados de fornecedores de Luanda e Cabinda. Por motivos de segurança operacional e proteção contra fraudes, todos os contactos pessoais permanecem estritamente protegidos. Suas compras e despachos são garantidos pelo <strong>Mediador Cabinda</strong>.
-              </p>
-              
-              <div className="p-3 bg-slate-950/50 rounded-2xl border border-white/5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10px] text-amber-300">
-                <p className="flex items-center gap-1.5 font-bold">
-                  <span>🔒</span> Sem Contactos Expostos
-                </p>
-                <p className="flex items-center gap-1.5 font-bold">
-                  <span>⚓</span> Cabotagem Marítima Integrada
-                </p>
-                <p className="flex items-center gap-1.5 font-bold">
-                  <span>📄</span> Faturação e Garantia Legal
-                </p>
-              </div>
+        <div className="space-y-6 max-w-7xl mx-auto animate-fade-in" id="mercado-fornecedores-screen">
+          {/* Hero Banner with Categories & Value Propositions */}
+          <MarketplaceHeroBanner
+            onQuickCategory={(catId) => {
+              setMarketSelectedCategory(catId);
+              setMarketSelectedSubCategory('');
+              setMarketActiveTab('products');
+            }}
+            onOpenOrderModal={() => setCurrentView('fazer-pedido')}
+            onOpenCalculator={() => setCurrentView('simulador-frete')}
+          />
+
+          {/* Category Navigation (AliExpress-style Taxonomy Hierarchy) */}
+          <MarketplaceCategoryNav
+            selectedCategory={marketSelectedCategory}
+            selectedSubCategory={marketSelectedSubCategory}
+            products={supplierProducts}
+            onSelectCategory={(catId) => {
+              setMarketSelectedCategory(catId);
+              setMarketSelectedSubCategory('');
+              setMarketActiveTab('products');
+            }}
+            onSelectSubCategory={(subId) => {
+              setMarketSelectedSubCategory(subId);
+              setMarketActiveTab('products');
+            }}
+          />
+
+          {/* Navigation Tabs: Products Vitrine vs Suppliers Directory */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setMarketActiveTab('products')}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  marketActiveTab === 'products'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+                id="market-tab-products"
+              >
+                <span>🛍️</span>
+                <span>Vitrine de Produtos</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  marketActiveTab === 'products' ? 'bg-amber-400 text-slate-950' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {filteredMarketProducts.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMarketActiveTab('suppliers')}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  marketActiveTab === 'suppliers'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+                id="market-tab-suppliers"
+              >
+                <span>🏭</span>
+                <span>Diretório de Fornecedores</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  marketActiveTab === 'suppliers' ? 'bg-amber-400 text-slate-950' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {filteredSuppliersList.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Quick Context Summary */}
+            <div className="flex items-center gap-2 px-2 text-xs text-slate-500 font-medium">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Intermediação Operacional & Alfandegária <strong>Garantida</strong></span>
             </div>
           </div>
 
-          {/* Search & Filters */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 gap-4 flex flex-col md:flex-row md:items-center justify-between shadow-xs">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={supplierSearchText}
-                placeholder="Pesquisar por fornecedores ou produtos..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:border-amber-400 focus:bg-white text-slate-800"
-                id="supplier-search-input"
-                onChange={(e) => setSupplierSearchText(e.target.value)}
-              />
-            </div>
+          {/* Search & Filter Toolbar */}
+          <MarketplaceSearchBar
+            searchTerm={marketSearchTerm}
+            selectedCategory={marketSelectedCategory}
+            selectedSupplier={marketSelectedSupplier}
+            selectedLocation={marketSelectedLocation}
+            sortBy={marketSortBy}
+            onlyInStock={marketOnlyInStock}
+            onlySponsored={marketOnlySponsored}
+            suppliers={suppliers}
+            totalResultsCount={marketActiveTab === 'products' ? filteredMarketProducts.length : filteredSuppliersList.length}
+            onSearchChange={setMarketSearchTerm}
+            onCategoryChange={(catId) => {
+              setMarketSelectedCategory(catId);
+              setMarketSelectedSubCategory('');
+            }}
+            onSupplierChange={setMarketSelectedSupplier}
+            onLocationChange={setMarketSelectedLocation}
+            onSortByChange={setMarketSortBy}
+            onToggleOnlyInStock={() => setMarketOnlyInStock(prev => !prev)}
+            onToggleOnlySponsored={() => setMarketOnlySponsored(prev => !prev)}
+          />
 
-            {/* Category Filter */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={supplierSelectedCategory}
-                className="bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs font-bold text-slate-700 focus:outline-hidden cursor-pointer"
-                id="supplier-cat-filter"
-                onChange={(e) => setSupplierSelectedCategory(e.target.value)}
-              >
-                <option value="all">Todas as Categorias</option>
-                <option value="Eletrónicos e Tecnologia">Eletrónicos e Tecnologia</option>
-                <option value="Construção e Metalurgia">Construção e Metalurgia</option>
-                <option value="Máquinas e Equipamentos">Máquinas e Equipamentos</option>
-                <option value="Material Elétrico">Material Elétrico</option>
-              </select>
-
-              <select
-                value={supplierSelectedCity}
-                className="bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs font-bold text-slate-700 focus:outline-hidden cursor-pointer"
-                id="supplier-city-filter"
-                onChange={(e) => setSupplierSelectedCity(e.target.value)}
-              >
-                <option value="all">Todas as Cidades</option>
-                <option value="Luanda">Luanda</option>
-                <option value="Cabinda">Cabinda</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Suppliers Grid sorted by Sponsor Tier & plan */}
-          <div className="space-y-8">
-            {filteredSuppliersList.map((sup) => {
-              const planConfig = {
-                diamante: {
-                  border: 'border-2 border-amber-400 bg-amber-50/5',
-                  badge: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black',
-                  label: '⭐ Patrocinado Diamante',
-                  cardStyle: 'shadow-md shadow-amber-100/30'
-                },
-                ouro: {
-                  border: 'border border-amber-300 hover:border-amber-400 bg-amber-50/2',
-                  badge: 'bg-amber-450 text-slate-950 font-bold',
-                  label: '⭐ Patrocinado Ouro',
-                  cardStyle: 'shadow-xs'
-                },
-                prata: {
-                  border: 'border border-slate-250 bg-slate-50/10',
-                  badge: 'bg-slate-400 text-white font-bold',
-                  label: 'Destaque Prata',
-                  cardStyle: 'shadow-xs'
-                },
-                gratuito: {
-                  border: 'border border-slate-200 bg-white',
-                  badge: 'bg-slate-100 text-slate-500 font-medium',
-                  label: 'Membro Homologado',
-                  cardStyle: 'shadow-xs'
-                }
-              }[sup.plan];
-
-              const productsForThisSupplier = supplierProducts.filter(
-                (p) => p.supplierId === sup.id && p.published &&
-                  (!supplierSearchText.trim() || p.name.toLowerCase().includes(supplierSearchText.toLowerCase()))
-              );
-
-              return (
-                <div 
-                  key={sup.id}
-                  className={`rounded-3xl p-5 sm:p-6 transition-all ${planConfig.border} ${planConfig.cardStyle}`}
-                  id={`supplier-group-${sup.id}`}
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-dashed border-slate-200">
-                    <div className="flex items-start sm:items-center gap-4">
-                      {sup.logoUrl ? (
-                        <img 
-                          src={sup.logoUrl} 
-                          alt={sup.name} 
-                          className="w-14 h-14 rounded-2xl object-cover bg-slate-100 border border-slate-200"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-250 flex items-center justify-center text-slate-400 text-lg font-bold">
-                          {sup.name.charAt(0)}
-                        </div>
-                      )}
-                      
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-display font-black text-slate-900 text-sm tracking-tight">{sup.name}</h3>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider ${planConfig.badge}`}>
-                            {planConfig.label}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-550 font-semibold">
-                          <span className="flex items-center gap-1">📍 {sup.city}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded-md text-[10px]">{sup.category}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="flex items-center gap-0.5 text-amber-500 font-bold">★ {sup.rating} <span className="text-slate-400 font-medium">({sup.reviewsCount})</span></span>
-                        </div>
-                        {sup.description && (
-                          <p className="text-xs text-slate-500 max-w-2xl mt-1 leading-relaxed">{sup.description}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-start lg:items-end justify-center shrink-0">
-                      <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">🔒 CONTACTOS EXCLUSIVOS</p>
-                      <span className="text-xs px-3 py-1 bg-emerald-50 text-emerald-800 font-extrabold rounded-lg inline-flex items-center gap-1.5 border border-emerald-100 mt-1">
-                        ✔️ Mediado pelo Mediador Cabinda
-                      </span>
-                      <button
-                        onClick={() => {
-                          setSelectedSupplierForMessage(sup);
-                          setShowSupplierMessageModal(true);
-                          setSupplierMessageText('');
-                          speak(`A abrir canal de mensagem para o fornecedor ${sup.name}`);
+          {/* TAB 1: PRODUCTS VITRINE (ALIEXPRESS GRID) */}
+          {marketActiveTab === 'products' && (
+            <div className="space-y-6">
+              {filteredMarketProducts.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4" id="marketplace-products-grid">
+                  {filteredMarketProducts.map((product) => {
+                    const sup = suppliers.find(s => s.id === product.supplierId);
+                    return (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        supplier={sup}
+                        onSelectProduct={(p) => setSelectedProduct(p)}
+                        onQuickBuy={(p) => {
+                          setSelectedProduct(p);
                         }}
-                        className="mt-2.5 w-full lg:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                      >
-                        <span>💬</span> Enviar Mensagem ao Fornecedor
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Supplier's Products List */}
-                  <div className="pt-5 space-y-3">
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">CATÁLOGO DE PRODUTOS PARCEIROS</p>
-                    {productsForThisSupplier.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-3 italic">Sem produtos disponíveis para este fornecedor no momento.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {productsForThisSupplier.map((prod) => {
-                          const isEsgotado = prod.availability === 'esgotado' || prod.stock === 0;
-                          return (
-                            <div 
-                              key={prod.id} 
-                              className="bg-slate-50/50 hover:bg-white transition-all border border-slate-150 p-3 rounded-2xl flex flex-col justify-between group h-full hover:shadow-xs"
-                              id={`supplier-product-${prod.id}`}
-                            >
-                              <div className="space-y-2">
-                                {/* image & tag */}
-                                <div className="relative aspect-video rounded-xl bg-slate-100 overflow-hidden border border-slate-150">
-                                  {prod.photoUrl ? (
-                                    <img 
-                                      src={prod.photoUrl} 
-                                      alt={prod.name} 
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-350">
-                                      <span>Sem imagem</span>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Availability tag */}
-                                  <div className="absolute top-2 right-2">
-                                    {isEsgotado ? (
-                                      <span className="bg-red-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                                        Esgotado
-                                      </span>
-                                    ) : prod.availability === 'sob-pedido' ? (
-                                      <span className="bg-amber-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                                        Sob Pedido
-                                      </span>
-                                    ) : (
-                                      <span className="bg-emerald-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse-subtle">
-                                        Em Stock
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Title & details */}
-                                <div className="space-y-1">
-                                  <h4 className="font-bold text-xs text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-2 leading-snug">{prod.name}</h4>
-                                  <p className="text-[10px] text-slate-405 line-clamp-2 leading-relaxed font-semibold">{prod.description || 'Disponível para aquisição de Cabinda por intermediação.'}</p>
-                                </div>
-
-                                {/* Location & Availability metadata */}
-                                <div className="mt-2 space-y-1 bg-slate-100/50 p-2 rounded-xl text-[9.5px] text-slate-600 font-bold border border-slate-200">
-                                  <div className="flex items-center justify-between">
-                                    <span>📍 Localização do Artigo:</span>
-                                    <span className={`px-1.5 py-0.5 rounded text-[9.5px] ${
-                                      prod.location === 'Cabinda' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
-                                    }`}>
-                                      {prod.location || 'Luanda'}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span>📅 Disponível para Envio:</span>
-                                    <span className="text-slate-800">
-                                      {prod.availableFromDate || 'Imediata'}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Price and Action CTA */}
-                              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                                <div className="space-y-0.5">
-                                  <span className="text-[9px] text-slate-450 font-bold uppercase tracking-wider block">PREÇO BASE</span>
-                                  <span className="font-mono text-xs font-black text-slate-900 tracking-tight">
-                                    {prod.price.toLocaleString('pt-AO')} AOA
-                                  </span>
-                                </div>
-
-                                <button
-                                  onClick={() => {
-                                    if (isEsgotado) {
-                                      showModalAlert(
-                                        "Sem Ração / Stock", 
-                                        "Este produto encontra-se esgotado de momento. Contacte o suporte para encomendar sob pedido ou encontrar alternativas.", 
-                                        "warning"
-                                      );
-                                      return;
-                                    }
-                                    
-                                    // Trigger quick buy! Auto-populate create order form!
-                                    // Let's create an intuitive auto-filling routine inside state:
-                                    const prefilledName = prod.name;
-                                    const prefilledPrice = prod.price;
-                                    const prefilledSupplier = sup.name;
-                                    const prefilledSupplierId = sup.id;
-                                    const prefilledPhoto = prod.photoUrl;
-                                    const prefilledLocation = prod.location;
-                                    const prefilledAvailableFromDate = prod.availableFromDate;
-                                    
-                                    // Switch views and store prefilled details so FazerPedido reads them!
-                                    setPrefilledMarketProduct({
-                                      name: prefilledName,
-                                      price: prefilledPrice,
-                                      supplierName: prefilledSupplier,
-                                      supplierId: prefilledSupplierId,
-                                      photoUrl: prefilledPhoto,
-                                      location: prefilledLocation,
-                                      availableFromDate: prefilledAvailableFromDate
-                                    });
-                                    
-                                    setCurrentView('fazer-pedido');
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs ${
-                                    isEsgotado 
-                                      ? 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-150'
-                                      : 'bg-amber-400 hover:bg-amber-500 text-slate-950 hover:scale-[1.02]'
-                                  }`}
-                                  id={`buy-from-supplier-${prod.id}`}
-                                >
-                                  <span>🛒</span> Comprar pelo Mediador
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                      />
+                    );
+                  })}
                 </div>
-              );
-            })}
+              ) : (
+                <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200 p-8 space-y-3">
+                  <span className="text-4xl block">🔍</span>
+                  <h3 className="font-display font-black text-slate-800 text-sm">Nenhum produto encontrado com os filtros actuais</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Tente ajustar ou limpar a sua pesquisa de produtos, categorias ou fornecedores.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMarketSearchTerm('');
+                      setMarketSelectedCategory('');
+                      setMarketSelectedSubCategory('');
+                      setMarketSelectedSupplier('');
+                      setMarketSelectedLocation('');
+                      setMarketSortBy('relevance');
+                      setMarketOnlyInStock(false);
+                      setMarketOnlySponsored(false);
+                    }}
+                    className="mt-2 px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                  >
+                    Limpar Filtros e Ver Todos
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
-            {filteredSuppliersList.length === 0 && (
-              <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
-                <span className="text-3xl block mb-2">🔍</span>
-                <p className="text-xs text-slate-500 font-bold uppercase">Nenhum fornecedor ou produto corresponde aos filtros</p>
-                <p className="text-[11px] text-slate-400 mt-1">Experimente limpar a sua pesquisa ou trocar os filtros de categoria e cidade.</p>
-              </div>
-            )}
-          </div>
+          {/* TAB 2: SUPPLIERS DIRECTORY */}
+          {marketActiveTab === 'suppliers' && (
+            <div className="space-y-6">
+              {filteredSuppliersList.length > 0 ? (
+                <div className="space-y-6" id="marketplace-suppliers-list">
+                  {filteredSuppliersList.map((sup) => {
+                    const planConfig = {
+                      diamante: {
+                        border: 'border-2 border-amber-400 bg-amber-50/10',
+                        badge: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black',
+                        label: '⭐ Patrocinado Diamante',
+                        cardStyle: 'shadow-md shadow-amber-100/30'
+                      },
+                      ouro: {
+                        border: 'border border-amber-300 hover:border-amber-400 bg-amber-50/5',
+                        badge: 'bg-amber-400 text-slate-950 font-black',
+                        label: '⭐ Patrocinado Ouro',
+                        cardStyle: 'shadow-2xs'
+                      },
+                      prata: {
+                        border: 'border border-slate-250 bg-slate-50/20',
+                        badge: 'bg-slate-400 text-white font-bold',
+                        label: 'Destaque Prata',
+                        cardStyle: 'shadow-2xs'
+                      },
+                      gratuito: {
+                        border: 'border border-slate-200 bg-white',
+                        badge: 'bg-slate-100 text-slate-600 font-bold',
+                        label: 'Fornecedor Homologado',
+                        cardStyle: 'shadow-2xs'
+                      }
+                    }[sup.plan];
+
+                    const productsForThisSupplier = supplierProducts.filter(
+                      (p) => p.supplierId === sup.id && p.published &&
+                        (!marketSearchTerm.trim() || p.name.toLowerCase().includes(marketSearchTerm.toLowerCase()))
+                    );
+
+                    return (
+                      <div 
+                        key={sup.id}
+                        className={`rounded-3xl p-5 sm:p-6 bg-white transition-all ${planConfig.border} ${planConfig.cardStyle}`}
+                        id={`supplier-group-${sup.id}`}
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-dashed border-slate-200">
+                          <div className="flex items-start sm:items-center gap-4">
+                            {sup.logoUrl ? (
+                              <img 
+                                src={sup.logoUrl} 
+                                alt={sup.name} 
+                                className="w-14 h-14 rounded-2xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-250 flex items-center justify-center text-slate-400 text-lg font-bold shrink-0">
+                                {sup.name.charAt(0)}
+                              </div>
+                            )}
+                            
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-display font-black text-slate-900 text-sm sm:text-base tracking-tight">{sup.name}</h3>
+                                <span className={`text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider ${planConfig.badge}`}>
+                                  {planConfig.label}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-semibold">
+                                <span className="flex items-center gap-1 text-slate-700">📍 {sup.city}</span>
+                                <span className="text-slate-300">•</span>
+                                <span className="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md text-[10px]">{sup.category}</span>
+                                <span className="text-slate-300">•</span>
+                                <span className="flex items-center gap-0.5 text-amber-500 font-bold">★ {sup.rating} <span className="text-slate-400 font-medium">({sup.reviewsCount} avaliações)</span></span>
+                              </div>
+                              {sup.description && (
+                                <p className="text-xs text-slate-500 max-w-2xl mt-1 leading-relaxed">{sup.description}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-start lg:items-end justify-center shrink-0">
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">🔒 CONTACTOS INTERMEDIADOS</p>
+                            <span className="text-xs px-3 py-1 bg-emerald-50 text-emerald-800 font-black rounded-lg inline-flex items-center gap-1.5 border border-emerald-100 mt-1">
+                              ✔️ Operação 100% Garantida
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSupplierForMessage(sup);
+                                setShowSupplierMessageModal(true);
+                                setSupplierMessageText('');
+                                speak(`A abrir canal de mensagem para o fornecedor ${sup.name}`);
+                              }}
+                              className="mt-2.5 w-full lg:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                            >
+                              <span>💬</span> Enviar Mensagem ao Fornecedor
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Supplier's Products Showcase */}
+                        <div className="pt-5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">PRODUTOS DESTE FORNECEDOR ({productsForThisSupplier.length})</p>
+                            {productsForThisSupplier.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMarketSelectedSupplier(sup.id);
+                                  setMarketActiveTab('products');
+                                }}
+                                className="text-[11px] font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
+                              >
+                                Ver todos na vitrine →
+                              </button>
+                            )}
+                          </div>
+
+                          {productsForThisSupplier.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-3 italic">Sem produtos disponíveis para este fornecedor no momento.</p>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                              {productsForThisSupplier.slice(0, 5).map((prod) => (
+                                <ProductCard
+                                  key={prod.id}
+                                  product={prod}
+                                  supplier={sup}
+                                  onSelectProduct={(p) => setSelectedProduct(p)}
+                                  onQuickBuy={(p) => setSelectedProduct(p)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200 p-8 space-y-3">
+                  <span className="text-4xl block">🔍</span>
+                  <h3 className="font-display font-black text-slate-800 text-sm">Nenhum fornecedor encontrado</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Tente alterar os termos de pesquisa ou filtros selecionados.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -4374,387 +4976,61 @@ export default function ClientDashboard({
       )}
 
       {/* 🔮 INTER-COMMERCE PRODUCT DETAIL & DIRECT BUY MODAL OVERLAY */}
-      {selectedProduct && (() => {
-        const sup = suppliers.find(s => s.id === selectedProduct.supplierId);
-        const isEsgotado = selectedProduct.availability === 'esgotado' || selectedProduct.stock === 0;
-        const prodCode = getProductCode(selectedProduct);
-        const itemSubtotal = selectedProduct.price * directBuyQty;
-        const freightEst = 12000 * directBuyQty;
-        const dispatchEst = 8000;
-        const commEst = Math.round(itemSubtotal * 0.12);
-        const deliveryFee = directBuyDelivery === 'domicilio' ? 5000 : 0;
-        const grandTotalEst = itemSubtotal + freightEst + dispatchEst + commEst + deliveryFee;
+      {selectedProduct && (
+        <ProductDetailsModal
+          product={selectedProduct}
+          suppliers={suppliers}
+          allProducts={supplierProducts}
+          onClose={() => setSelectedProduct(null)}
+          onSelectProduct={(p) => setSelectedProduct(p)}
+          onInitiateChat={(p, code) => {
+            const originLoc = p.location || 'Luanda';
+            const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo [CÓDIGO: ${code}] "${p.name}" anunciado pelo parceiro de ${originLoc}. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${p.price.toLocaleString('pt-AO')} AOA.`;
+            
+            localStorage.setItem('mediador_prefilled_product_message', inquiryMsg);
+            localStorage.setItem('mediador_active_channel', 'general');
+            
+            setSelectedProduct(null);
+            setCurrentView('mensagens');
+            speak(`Iniciando chat operacional de intermediação para o artigo código ${code}`);
+          }}
+          onCreateDirectOrder={(orderData) => {
+            const newOrderId = `MED-${Math.floor(1000 + Math.random() * 9000)}`;
+            const newOrder: Order = {
+              id: newOrderId,
+              clientId: activeClientId,
+              clientName: client?.name || 'Cliente Cabinda',
+              clientPhone: client?.phone || '+244 923 000 000',
+              productId: orderData.productId,
+              productCode: orderData.productCode,
+              productName: orderData.productName,
+              quantity: orderData.quantity,
+              supplierName: orderData.supplierName,
+              supplierPhone: orderData.supplierPhone,
+              supplierLocation: orderData.supplierLocation,
+              productPhotoUrl: orderData.productPhotoUrl,
+              notes: orderData.notes,
+              budgetRawPrice: orderData.budgetRawPrice,
+              budgetShipping: orderData.budgetShipping,
+              dispatchFee: orderData.dispatchFee,
+              commissionRate: 0.12,
+              commissionAmount: orderData.commissionAmount,
+              totalAmount: orderData.totalAmount,
+              paid: false,
+              deliveryOption: orderData.deliveryOption,
+              deliveryAddress: orderData.deliveryAddress,
+              status: 'RECEBIDO',
+              pointsEarned: Math.round(orderData.budgetRawPrice / 1000),
+              createdAt: new Date().toISOString()
+            };
 
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in" id="product-detail-modal-overlay">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full border border-slate-150 overflow-hidden animate-scale-up text-slate-800 flex flex-col max-h-[90vh]">
-              {/* Header */}
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-amber-500 text-lg">{isDirectBuyMode ? '⚡' : '🛍️'}</span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      {isDirectBuyMode ? 'Solicitação de Compra Direta' : 'Detalhes do Artigo Homologado'}
-                    </span>
-                    <span className="text-xs font-mono font-black text-amber-800 flex items-center gap-1">
-                      🏷️ Código: {prodCode}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    setIsDirectBuyMode(false);
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/80 rounded-xl transition-all cursor-pointer"
-                  title="Fechar"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Scrollable details / Direct Buy Flow */}
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 scrollbar-none">
-                {!isDirectBuyMode ? (
-                  <>
-                    {/* Photo & Badge */}
-                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-150 bg-slate-50 shrink-0">
-                      {selectedProduct.photoUrl ? (
-                        <img 
-                          src={selectedProduct.photoUrl} 
-                          alt={selectedProduct.name} 
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold">
-                          Sem Foto Disponível
-                        </div>
-                      )}
-
-                      {/* Product Identity Watermark Tag */}
-                      <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur-xs text-white font-mono font-black text-[10px] px-2.5 py-1 rounded-lg border border-white/20 shadow-md flex items-center gap-1.5">
-                        <span>🏷️ CÓDIGO:</span>
-                        <span className="text-amber-400">{prodCode}</span>
-                      </div>
-
-                      {selectedProduct.sponsored && (
-                        <span className="absolute top-3 left-3 bg-amber-400 text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                          Destaque Homologado
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Main details */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-base font-black text-slate-900 tracking-tight font-sans leading-snug">
-                          {selectedProduct.name}
-                        </h3>
-                      </div>
-                      
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] font-bold text-slate-500">
-                        <span className="flex items-center gap-1 text-slate-700">🏷️ SKU: <strong>{prodCode}</strong></span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">📍 Origem: <strong>{selectedProduct.location || 'Luanda'}</strong></span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">📅 Disp.: <strong>{selectedProduct.availableFromDate || 'Imediata (Hoje)'}</strong></span>
-                        <span>•</span>
-                        <span>Fornecedor: <strong>{sup?.name || 'Distribuidor Parceiro'}</strong></span>
-                        <span>•</span>
-                        <span className={`px-2 py-0.5 rounded-full font-black ${
-                          isEsgotado ? 'bg-red-50 text-red-650' : selectedProduct.availability === 'sob-pedido' ? 'bg-blue-50 text-blue-750' : 'bg-emerald-50 text-emerald-800'
-                        }`}>
-                          {isEsgotado ? 'Esgotado' : selectedProduct.availability === 'sob-pedido' ? 'Sob Pedido' : 'Disponível em Stock'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Price block */}
-                    <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-wider block">Preço de Compra Intermediado</span>
-                        <span className="font-mono text-lg font-black text-slate-900 tracking-tight block">
-                          {selectedProduct.price.toLocaleString('pt-AO')} Kz
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-amber-900 bg-amber-200 px-3 py-1 rounded-full border border-amber-300">
-                        Com Despacho & Alfândega
-                      </span>
-                    </div>
-
-                    {/* Specifications & description */}
-                    <div className="space-y-2.5">
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Especificações & Qualidade Técnica</h4>
-                      <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl text-xs font-semibold leading-relaxed text-slate-600 space-y-1">
-                        <p>{selectedProduct.description || 'Produto homologado de alta qualidade técnica e robustez, testado pela equipa alfandegária.'}</p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-3 mt-3 border-t border-slate-200/60 text-[10px] font-bold text-slate-500">
-                          <p>📋 Estado: <span className="text-slate-800">Novo em Caixa</span></p>
-                          <p>📦 Stock Físico: <span className="text-slate-800">{isEsgotado ? 'Sem stock' : `${selectedProduct.stock} unidades`}</span></p>
-                          <p>🏷️ Cód. Identidade: <span className="font-mono text-amber-700 font-black">{prodCode}</span></p>
-                          <p>🛡️ Garantia: <span className="text-slate-800">Intermediação Mediador</span></p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Protection warning */}
-                    <div className="bg-sky-50 border border-sky-100 p-3.5 rounded-2xl text-[10px] text-sky-800 flex items-start gap-2 leading-relaxed font-bold">
-                      <span>⚓</span>
-                      <p>Por motivos de faturamento legal e proteção contra burlas comerciais, a compra é integralmente mediada pela equipa do <strong>Mediador Cabinda</strong>. Nós compramos e fazemos a entrega.</p>
-                    </div>
-                  </>
-                ) : (
-                  /* DIRECT BUY QUICK FORM */
-                  <div className="space-y-4 animate-fade-in">
-                    {/* Selected product bar */}
-                    <div className="bg-amber-500/10 border border-amber-200 p-3 rounded-2xl flex items-center gap-3">
-                      <img 
-                        src={selectedProduct.photoUrl} 
-                        alt={selectedProduct.name} 
-                        className="w-14 h-14 rounded-xl object-cover border border-amber-200 bg-white shrink-0"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="overflow-hidden flex-1">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="font-mono text-[9px] font-black text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded-md">
-                            {prodCode}
-                          </span>
-                          <span className="text-[9px] text-slate-500 font-bold">📍 {selectedProduct.location || 'Luanda'}</span>
-                        </div>
-                        <h4 className="font-bold text-xs text-slate-900 truncate">{selectedProduct.name}</h4>
-                        <p className="font-mono text-xs font-black text-slate-900 mt-0.5">
-                          {selectedProduct.price.toLocaleString('pt-AO')} AOA / unid.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quantity Picker */}
-                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800 block">Quantidade Pretendida</span>
-                        <span className="text-[10px] text-slate-500">Stock disponível: {selectedProduct.stock || 10} unid.</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDirectBuyQty(prev => Math.max(1, prev - 1))}
-                          className="w-8 h-8 rounded-lg bg-white border border-slate-250 text-slate-800 font-black text-sm flex items-center justify-center hover:bg-slate-100 cursor-pointer shadow-2xs"
-                        >
-                          -
-                        </button>
-                        <span className="font-mono font-black text-sm w-6 text-center text-slate-900">
-                          {directBuyQty}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setDirectBuyQty(prev => prev + 1)}
-                          className="w-8 h-8 rounded-lg bg-white border border-slate-250 text-slate-800 font-black text-sm flex items-center justify-center hover:bg-slate-100 cursor-pointer shadow-2xs"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Delivery Mode */}
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                        Modalidade de Entrega em Cabinda
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDirectBuyDelivery('escritorio')}
-                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                            directBuyDelivery === 'escritorio'
-                              ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs'
-                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="text-xs block">🏢 Balcão Porto Cabinda</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">Armazém C-4 (Sem custo extra)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setDirectBuyDelivery('domicilio')}
-                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                            directBuyDelivery === 'domicilio'
-                              ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs'
-                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="text-xs block">🚚 Entrega ao Domicílio</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">+5.000 AOA em Cabinda</span>
-                        </button>
-                      </div>
-
-                      {directBuyDelivery === 'domicilio' && (
-                        <div className="pt-1">
-                          <input
-                            type="text"
-                            value={directBuyAddress}
-                            onChange={e => setDirectBuyAddress(e.target.value)}
-                            placeholder="Indique o Bairro, Rua e Ponto de Referência em Cabinda..."
-                            className="w-full text-xs p-2.5 bg-white border border-slate-250 rounded-xl focus:border-amber-400 focus:outline-none"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Notes */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                        Instruções ou Observações (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        value={directBuyNotes}
-                        onChange={e => setDirectBuyNotes(e.target.value)}
-                        placeholder="Ex: Por favor confirmar se inclui cabos/acessórios, cor preta..."
-                        className="w-full text-xs p-2.5 bg-white border border-slate-250 rounded-xl focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Estimated Cost Breakdown */}
-                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-1.5 text-xs font-semibold text-slate-600">
-                      <div className="flex justify-between">
-                        <span>Valor dos Artigos ({directBuyQty}x):</span>
-                        <span className="font-mono text-slate-900 font-bold">{itemSubtotal.toLocaleString('pt-AO')} Kz</span>
-                      </div>
-                      <div className="flex justify-between text-[11px] text-slate-500">
-                        <span>Estimativa de Frete Luanda ➔ Cabinda:</span>
-                        <span className="font-mono">{freightEst.toLocaleString('pt-AO')} Kz</span>
-                      </div>
-                      <div className="flex justify-between text-[11px] text-slate-500">
-                        <span>Despacho Aduaneiro & Guia de Cabotagem:</span>
-                        <span className="font-mono">{dispatchEst.toLocaleString('pt-AO')} Kz</span>
-                      </div>
-                      {directBuyDelivery === 'domicilio' && (
-                        <div className="flex justify-between text-[11px] text-slate-500">
-                          <span>Taxa de Entrega ao Domicílio:</span>
-                          <span className="font-mono">5.000 Kz</span>
-                        </div>
-                      )}
-                      <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                        <span className="font-bold text-slate-900">Total Estimado da Operação:</span>
-                        <span className="font-mono text-sm font-black text-amber-700">
-                          {grandTotalEst.toLocaleString('pt-AO')} Kz
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-[10px] text-emerald-900 font-bold flex items-start gap-2">
-                      <span>✓</span>
-                      <p>Sem pagamento imediato obrigatório. A nossa equipa entrará em contacto para confirmar o artigo, validar a fatura comercial e emitir a fatura pro-forma oficial.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 3 ACTION BUTTONS (CATALOG / CHAT / DIRECT BUY) */}
-              <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
-                {!isDirectBuyMode ? (
-                  <>
-                    {/* Opção 1: Voltar ao Catálogo */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProduct(null)}
-                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all h-11 shrink-0 cursor-pointer"
-                    >
-                      Voltar ao Catálogo
-                    </button>
-                    
-                    {/* Opção 2: Consultar Vendedor (Chat & IA) com Código e Foto */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const originLoc = selectedProduct.location || 'Luanda';
-                        const inquiryMsg = `Olá Mediador Cabinda! Gostaria de intermediar a aquisição do artigo [CÓDIGO: ${prodCode}] "${selectedProduct.name}" anunciado pelo parceiro de ${originLoc}. Podem verificar a viabilidade aduaneira e emissão de guia de transporte? Preço Base: ${selectedProduct.price.toLocaleString('pt-AO')} AOA.`;
-                        
-                        localStorage.setItem('mediador_prefilled_product_message', inquiryMsg);
-                        localStorage.setItem('mediador_active_channel', 'general');
-                        
-                        setSelectedProduct(null);
-                        setCurrentView('mensagens');
-                        speak(`Iniciando chat operacional de intermediação para o artigo código ${prodCode}`);
-                      }}
-                      className="flex-1 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 h-11 cursor-pointer shadow-xs"
-                    >
-                      <span>💬</span> Consultar Vendedor
-                    </button>
-
-                    {/* Opção 3: Fazer Compra Direta / Solicitar Aquisição Imediata */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsDirectBuyMode(true);
-                        speak(`Preparando compra direta para o artigo ${selectedProduct.name}`);
-                      }}
-                      className="flex-1 px-4 py-2.5 bg-amber-400 hover:bg-amber-500 active:scale-98 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 h-11 cursor-pointer shadow-md font-display uppercase tracking-wider"
-                    >
-                      <span>⚡</span> Fazer Compra Direta
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setIsDirectBuyMode(false)}
-                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all h-11 shrink-0 cursor-pointer"
-                    >
-                      ← Voltar aos Detalhes
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newOrderId = `MED-${Math.floor(1000 + Math.random() * 9000)}`;
-                        const newOrder: Order = {
-                          id: newOrderId,
-                          clientId: activeClientId,
-                          clientName: client?.name || 'Cliente Cabinda',
-                          clientPhone: client?.phone || '+244 923 000 000',
-                          productId: selectedProduct.id,
-                          productCode: prodCode,
-                          productName: selectedProduct.name,
-                          quantity: directBuyQty,
-                          supplierName: sup?.name || 'Fornecedor Homologado',
-                          supplierPhone: sup?.phoneHidden || '+244 924 111 222',
-                          supplierLocation: selectedProduct.location || 'Luanda',
-                          productPhotoUrl: selectedProduct.photoUrl,
-                          notes: directBuyNotes ? `[Compra Direta SKU: ${prodCode}] ${directBuyNotes}` : `Compra Direta do artigo ${prodCode} - ${selectedProduct.name}`,
-                          budgetRawPrice: itemSubtotal,
-                          budgetShipping: freightEst,
-                          dispatchFee: dispatchEst,
-                          commissionRate: 0.12,
-                          commissionAmount: commEst,
-                          totalAmount: grandTotalEst,
-                          paid: false,
-                          deliveryOption: directBuyDelivery,
-                          deliveryAddress: directBuyDelivery === 'domicilio' ? (directBuyAddress || 'Cabinda') : 'Balcão Armazém C-4, Porto Comercial de Cabinda',
-                          status: 'RECEBIDO',
-                          pointsEarned: Math.round(itemSubtotal / 1000),
-                          createdAt: new Date().toISOString()
-                        };
-
-                        onAddOrder(newOrder);
-                        speak(`Solicitação de compra direta do artigo ${selectedProduct.name} registada com sucesso!`);
-                        setSelectedProduct(null);
-                        setIsDirectBuyMode(false);
-                        setDirectBuySuccessOrder(newOrder);
-                      }}
-                      className="flex-1 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-white text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 h-11 cursor-pointer shadow-md font-display uppercase tracking-wider"
-                    >
-                      <span>🚀</span> Confirmar e Enviar Pedido
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+            onAddOrder(newOrder);
+            speak(`Solicitação de compra direta do artigo ${newOrder.productName} registada com sucesso!`);
+            setSelectedProduct(null);
+            setDirectBuySuccessOrder(newOrder);
+          }}
+        />
+      )}
 
       {/* 🎉 DIRECT BUY SUCCESS CELEBRATION MODAL */}
       {directBuySuccessOrder && (

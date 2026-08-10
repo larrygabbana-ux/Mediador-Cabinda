@@ -4,8 +4,27 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Client, Order, Message, Notification, OrderStatus, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest, BotSettings } from '../types';
-import { CARRIER_COMPANIES } from '../data/mockData';
+import { 
+  Client, 
+  Order, 
+  Message, 
+  Notification, 
+  OrderStatus, 
+  CarrierCompany, 
+  Supplier, 
+  SupplierProduct, 
+  SupplierMessage, 
+  Collaborator, 
+  CollaboratorSale, 
+  SupplierService, 
+  ServiceRequest, 
+  BotSettings,
+  GeneralLogisticsSettings,
+  DynamicKnowledgeItem,
+  KnowledgeAuditLog,
+  LogisticsModeConfig
+} from '../types';
+import { CARRIER_COMPANIES, MASTER_ADMIN_CREDENTIALS, wipeAllStoredData } from '../data/mockData';
 import { 
   BarChart, 
   Users, 
@@ -19,6 +38,7 @@ import {
   MapPin, 
   Check, 
   CheckCircle,
+  CheckCircle2,
   FileText, 
   Truck, 
   CornerDownRight, 
@@ -43,11 +63,34 @@ import {
   Settings as SettingsIcon,
   HelpCircle,
   Zap,
-  Shield
+  Shield,
+  ShieldCheck,
+  Edit3,
+  Layers,
+  Tag,
+  Ship,
+  Plane,
+  Globe,
+  History,
+  BookOpen,
+  PlusCircle,
+  Trash,
+  Eye,
+  ArrowRight
 } from 'lucide-react';
 import SharedChat from './SharedChat';
 import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
-import { KNOWLEDGE_BASE_ITEMS, POPULAR_QUESTIONS, solveBotQueryLocally } from '../utils/aiBotKnowledge';
+import { 
+  getStoredLogisticsConfig, 
+  saveStoredLogisticsConfig,
+  getStoredKnowledgeBase, 
+  getStoredAuditLogs, 
+  addAuditLogEntry, 
+  solveBotQueryLocally,
+  DEFAULT_LOGISTICS_CONFIG,
+  INITIAL_DYNAMIC_KNOWLEDGE_BASE
+} from '../utils/aiBotKnowledge';
+import { MARKETPLACE_CATEGORIES, getCategoryById, getSubCategoryName } from '../data/marketplaceTaxonomy';
 
 interface AdminDashboardProps {
   clients: Client[];
@@ -85,6 +128,16 @@ interface AdminDashboardProps {
   onCreateServiceRequest: (newRequest: ServiceRequest) => void;
   onUpdateServiceRequest: (updatedRequest: ServiceRequest) => void;
 
+  // Logistics & AI Knowledge Base Dynamic Props
+  logisticsConfig?: GeneralLogisticsSettings;
+  onUpdateLogisticsConfig?: (newConfig: GeneralLogisticsSettings, notes?: string) => void;
+  knowledgeBase?: DynamicKnowledgeItem[];
+  onUpdateKnowledgeItem?: (updatedItem: DynamicKnowledgeItem) => void;
+  onCreateKnowledgeItem?: (newItem: DynamicKnowledgeItem) => void;
+  onDeleteKnowledgeItem?: (itemId: string) => void;
+  auditLogs?: KnowledgeAuditLog[];
+  onResetKnowledgeBaseToDefaults?: () => void;
+
   // Action overrides
   onChangeRole?: (role: 'client' | 'admin') => void;
   onChangeView?: (view: 'inicio' | 'fazer-pedido' | 'acompanhar-pedido' | 'cadastro' | 'entrar' | 'minha-conta' | 'historico' | 'pagamentos' | 'notificacoes' | 'suporte' | 'reclamacoes' | 'configuracoes' | 'sobre-nos' | 'termos-uso' | 'mercado-fornecedores' | 'mensagens' | 'parceria' | 'guia-ajuda') => void;
@@ -119,6 +172,14 @@ export default function AdminDashboard({
   serviceRequests,
   onCreateServiceRequest,
   onUpdateServiceRequest,
+  logisticsConfig,
+  onUpdateLogisticsConfig,
+  knowledgeBase,
+  onUpdateKnowledgeItem,
+  onCreateKnowledgeItem,
+  onDeleteKnowledgeItem,
+  auditLogs,
+  onResetKnowledgeBaseToDefaults,
   onChangeRole,
   onChangeView
 }: AdminDashboardProps) {
@@ -129,6 +190,139 @@ export default function AdminDashboard({
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderStatus | 'TODOS'>('TODOS');
   const [selectedColabId, setSelectedColabId] = useState<string | null>(null);
+
+  // Dynamic Logistics & Knowledge Base Live State
+  const activeLogistics = logisticsConfig || getStoredLogisticsConfig();
+  const [localLogistics, setLocalLogistics] = useState<GeneralLogisticsSettings>(() => {
+    const base = logisticsConfig || getStoredLogisticsConfig();
+    return {
+      ...base,
+      pickupLocationCabinda: base.pickupLocationCabinda || base.pickupAddressCabinda || '',
+      pickupAddressCabinda: base.pickupAddressCabinda || base.pickupLocationCabinda || '',
+      consolidationWarehouseLuanda: base.consolidationWarehouseLuanda || base.consolidationAddressLuanda || '',
+      consolidationAddressLuanda: base.consolidationAddressLuanda || base.consolidationWarehouseLuanda || '',
+      intermediationFeePercentage: base.intermediationFeePercentage || base.intermediationFeeRate || '',
+      intermediationFeeRate: base.intermediationFeeRate || base.intermediationFeePercentage || '',
+      customsTransitFeeAGT: base.customsTransitFeeAGT || base.customsTaxAGT || '',
+      customsTaxAGT: base.customsTaxAGT || base.customsTransitFeeAGT || '',
+      guaranteeAndRefundPolicy: base.guaranteeAndRefundPolicy || base.warrantyAndRefundPolicy || '',
+      warrantyAndRefundPolicy: base.warrantyAndRefundPolicy || base.guaranteeAndRefundPolicy || '',
+      operationalNotice: base.operationalNotice || base.operationalNote || '',
+      operationalNote: base.operationalNote || base.operationalNotice || '',
+      modes: {
+        aereo: {
+          ...base.modes.aereo,
+          estimatedDays: base.modes.aereo.estimatedDays || base.modes.aereo.averageTime || '',
+          averageTime: base.modes.aereo.averageTime || base.modes.aereo.estimatedDays || '',
+          costPerKg: base.modes.aereo.costPerKg || base.modes.aereo.costEstimate || '',
+          costEstimate: base.modes.aereo.costEstimate || base.modes.aereo.costPerKg || '',
+          recommendedFor: base.modes.aereo.recommendedFor || base.modes.aereo.recommendation || '',
+          recommendation: base.modes.aereo.recommendation || base.modes.aereo.recommendedFor || ''
+        },
+        maritimo: {
+          ...base.modes.maritimo,
+          estimatedDays: base.modes.maritimo.estimatedDays || base.modes.maritimo.averageTime || '',
+          averageTime: base.modes.maritimo.averageTime || base.modes.maritimo.estimatedDays || '',
+          costPerKg: base.modes.maritimo.costPerKg || base.modes.maritimo.costEstimate || '',
+          costEstimate: base.modes.maritimo.costEstimate || base.modes.maritimo.costPerKg || '',
+          recommendedFor: base.modes.maritimo.recommendedFor || base.modes.maritimo.recommendation || '',
+          recommendation: base.modes.maritimo.recommendation || base.modes.maritimo.recommendedFor || ''
+        },
+        terrestre: {
+          ...base.modes.terrestre,
+          estimatedDays: base.modes.terrestre.estimatedDays || base.modes.terrestre.averageTime || '',
+          averageTime: base.modes.terrestre.averageTime || base.modes.terrestre.estimatedDays || '',
+          costPerKg: base.modes.terrestre.costPerKg || base.modes.terrestre.costEstimate || '',
+          costEstimate: base.modes.terrestre.costEstimate || base.modes.terrestre.costPerKg || '',
+          recommendedFor: base.modes.terrestre.recommendedFor || base.modes.terrestre.recommendation || '',
+          recommendation: base.modes.terrestre.recommendation || base.modes.terrestre.recommendedFor || ''
+        }
+      }
+    };
+  });
+  
+  useEffect(() => {
+    const base = logisticsConfig || getStoredLogisticsConfig();
+    setLocalLogistics({
+      ...base,
+      pickupLocationCabinda: base.pickupLocationCabinda || base.pickupAddressCabinda || '',
+      pickupAddressCabinda: base.pickupAddressCabinda || base.pickupLocationCabinda || '',
+      consolidationWarehouseLuanda: base.consolidationWarehouseLuanda || base.consolidationAddressLuanda || '',
+      consolidationAddressLuanda: base.consolidationAddressLuanda || base.consolidationWarehouseLuanda || '',
+      intermediationFeePercentage: base.intermediationFeePercentage || base.intermediationFeeRate || '',
+      intermediationFeeRate: base.intermediationFeeRate || base.intermediationFeePercentage || '',
+      customsTransitFeeAGT: base.customsTransitFeeAGT || base.customsTaxAGT || '',
+      customsTaxAGT: base.customsTaxAGT || base.customsTransitFeeAGT || '',
+      guaranteeAndRefundPolicy: base.guaranteeAndRefundPolicy || base.warrantyAndRefundPolicy || '',
+      warrantyAndRefundPolicy: base.warrantyAndRefundPolicy || base.guaranteeAndRefundPolicy || '',
+      operationalNotice: base.operationalNotice || base.operationalNote || '',
+      operationalNote: base.operationalNote || base.operationalNotice || '',
+      modes: {
+        aereo: {
+          ...base.modes.aereo,
+          estimatedDays: base.modes.aereo.estimatedDays || base.modes.aereo.averageTime || '',
+          averageTime: base.modes.aereo.averageTime || base.modes.aereo.estimatedDays || '',
+          costPerKg: base.modes.aereo.costPerKg || base.modes.aereo.costEstimate || '',
+          costEstimate: base.modes.aereo.costEstimate || base.modes.aereo.costPerKg || '',
+          recommendedFor: base.modes.aereo.recommendedFor || base.modes.aereo.recommendation || '',
+          recommendation: base.modes.aereo.recommendation || base.modes.aereo.recommendedFor || ''
+        },
+        maritimo: {
+          ...base.modes.maritimo,
+          estimatedDays: base.modes.maritimo.estimatedDays || base.modes.maritimo.averageTime || '',
+          averageTime: base.modes.maritimo.averageTime || base.modes.maritimo.estimatedDays || '',
+          costPerKg: base.modes.maritimo.costPerKg || base.modes.maritimo.costEstimate || '',
+          costEstimate: base.modes.maritimo.costEstimate || base.modes.maritimo.costPerKg || '',
+          recommendedFor: base.modes.maritimo.recommendedFor || base.modes.maritimo.recommendation || '',
+          recommendation: base.modes.maritimo.recommendation || base.modes.maritimo.recommendedFor || ''
+        },
+        terrestre: {
+          ...base.modes.terrestre,
+          estimatedDays: base.modes.terrestre.estimatedDays || base.modes.terrestre.averageTime || '',
+          averageTime: base.modes.terrestre.averageTime || base.modes.terrestre.estimatedDays || '',
+          costPerKg: base.modes.terrestre.costPerKg || base.modes.terrestre.costEstimate || '',
+          costEstimate: base.modes.terrestre.costEstimate || base.modes.terrestre.costPerKg || '',
+          recommendedFor: base.modes.terrestre.recommendedFor || base.modes.terrestre.recommendation || '',
+          recommendation: base.modes.terrestre.recommendation || base.modes.terrestre.recommendedFor || ''
+        }
+      }
+    });
+  }, [logisticsConfig]);
+
+  const activeKnowledge = knowledgeBase || getStoredKnowledgeBase();
+  const activeAuditLogs = auditLogs || getStoredAuditLogs();
+
+  const [botSubTab, setBotSubTab] = useState<'logistica' | 'knowledge' | 'audit' | 'settings_sim'>('logistica');
+  const [logisticsNotes, setLogisticsNotes] = useState('');
+  const [logisticsSaveFeedback, setLogisticsSaveFeedback] = useState(false);
+  const [adminAuthorName, setAdminAuthorName] = useState('João Hilário António (Administrador Geral)');
+
+  // Knowledge Item creation & edit state
+  const [selectedKnowledgeCategory, setSelectedKnowledgeCategory] = useState<string>('TODAS');
+  const [editingKnowledgeItem, setEditingKnowledgeItem] = useState<DynamicKnowledgeItem | null>(null);
+  const [isCreatingKnowledgeItem, setIsCreatingKnowledgeItem] = useState(false);
+  const [knowledgeForm, setKnowledgeForm] = useState<Partial<DynamicKnowledgeItem>>({
+    category: 'Logística',
+    question: '',
+    shortAnswer: '',
+    detailedAnswer: '',
+    keywords: [],
+    suggestedNextQuestions: [],
+    isActive: true
+  });
+  const [keywordsInput, setKeywordsInput] = useState('');
+  const [nextQuestionsInput, setNextQuestionsInput] = useState('');
+  const [knowledgeFeedback, setKnowledgeFeedback] = useState<string | null>(null);
+
+  // Real-time AI Simulator State
+  const [simQuery, setSimQuery] = useState('');
+  const [simResult, setSimResult] = useState<{
+    text: string;
+    suggestedQuestions?: string[];
+    actionLink?: { label: string; view: string };
+    source?: string;
+  } | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
 
   // 24/7 AI Bot Settings State for Management
   const [adminBotSettings, setAdminBotSettings] = useState<BotSettings>(() => {
@@ -156,6 +350,172 @@ export default function AdminDashboard({
     localStorage.setItem('mediador_cabinda_bot_settings', JSON.stringify(updated));
     setBotSaveFeedback(true);
     setTimeout(() => setBotSaveFeedback(false), 3000);
+  };
+
+  // Handler for Saving Logistics Configuration
+  const handleSaveLogisticsConfig = () => {
+    const pickupCabinda = localLogistics.pickupLocationCabinda || localLogistics.pickupAddressCabinda || 'Armazém C-4, Recinto Portuário de Cabinda, Rua Direita';
+    const consolLuanda = localLogistics.consolidationWarehouseLuanda || localLogistics.consolidationAddressLuanda || 'Parque Logístico Portuário / Viana, Luanda';
+    const feeRate = localLogistics.intermediationFeePercentage || localLogistics.intermediationFeeRate || '10% a 15%';
+    const customsTax = localLogistics.customsTransitFeeAGT || localLogistics.customsTaxAGT || '8.000 AOA';
+    const warranty = localLogistics.guaranteeAndRefundPolicy || localLogistics.warrantyAndRefundPolicy || 'Reembolso total de 100% ou reposição imediata';
+    const note = localLogistics.operationalNotice || localLogistics.operationalNote || '';
+
+    const aereoTime = localLogistics.modes.aereo.estimatedDays || localLogistics.modes.aereo.averageTime || '1 dia';
+    const aereoCost = localLogistics.modes.aereo.costPerKg || localLogistics.modes.aereo.costEstimate || '2.500 AOA / kg';
+    const aereoRec = localLogistics.modes.aereo.recommendedFor || localLogistics.modes.aereo.recommendation || 'Cargas expressas e urgentes';
+
+    const maritimoTime = localLogistics.modes.maritimo.estimatedDays || localLogistics.modes.maritimo.averageTime || '2–3 dias';
+    const maritimoCost = localLogistics.modes.maritimo.costPerKg || localLogistics.modes.maritimo.costEstimate || '450 AOA / kg';
+    const maritimoRec = localLogistics.modes.maritimo.recommendedFor || localLogistics.modes.maritimo.recommendation || 'Cargas gerais e pesadas';
+
+    const terrestreTime = localLogistics.modes.terrestre.estimatedDays || localLogistics.modes.terrestre.averageTime || '7–8 dias';
+    const terrestreCost = localLogistics.modes.terrestre.costPerKg || localLogistics.modes.terrestre.costEstimate || '350 AOA / kg';
+    const terrestreRec = localLogistics.modes.terrestre.recommendedFor || localLogistics.modes.terrestre.recommendation || 'Cargas volumosas e materiais';
+
+    const updated: GeneralLogisticsSettings = {
+      ...localLogistics,
+      pickupAddressCabinda: pickupCabinda,
+      pickupLocationCabinda: pickupCabinda,
+      consolidationAddressLuanda: consolLuanda,
+      consolidationWarehouseLuanda: consolLuanda,
+      intermediationFeeRate: feeRate,
+      intermediationFeePercentage: feeRate,
+      customsTaxAGT: customsTax,
+      customsTransitFeeAGT: customsTax,
+      warrantyAndRefundPolicy: warranty,
+      guaranteeAndRefundPolicy: warranty,
+      operationalNote: note,
+      operationalNotice: note,
+      modes: {
+        aereo: {
+          ...localLogistics.modes.aereo,
+          averageTime: aereoTime,
+          estimatedDays: aereoTime,
+          costEstimate: aereoCost,
+          costPerKg: aereoCost,
+          recommendation: aereoRec,
+          recommendedFor: aereoRec,
+          status: localLogistics.modes.aereo.status || 'ativo'
+        },
+        maritimo: {
+          ...localLogistics.modes.maritimo,
+          averageTime: maritimoTime,
+          estimatedDays: maritimoTime,
+          costEstimate: maritimoCost,
+          costPerKg: maritimoCost,
+          recommendation: maritimoRec,
+          recommendedFor: maritimoRec,
+          status: localLogistics.modes.maritimo.status || 'ativo'
+        },
+        terrestre: {
+          ...localLogistics.modes.terrestre,
+          averageTime: terrestreTime,
+          estimatedDays: terrestreTime,
+          costEstimate: terrestreCost,
+          costPerKg: terrestreCost,
+          recommendation: terrestreRec,
+          recommendedFor: terrestreRec,
+          status: localLogistics.modes.terrestre.status || 'ativo'
+        }
+      },
+      lastUpdated: new Date().toISOString(),
+      updatedBy: adminAuthorName
+    };
+
+    saveStoredLogisticsConfig(updated);
+
+    if (onUpdateLogisticsConfig) {
+      onUpdateLogisticsConfig(updated, logisticsNotes || 'Atualização de modais e prazos operacionais');
+    } else {
+      addAuditLogEntry({
+        adminName: adminAuthorName,
+        adminRole: 'Super Administrador',
+        actionType: 'logistica_update',
+        section: 'Configurações de Logística',
+        fieldName: 'Modais de Transporte e Prazos',
+        previousValue: `Aéreo: ${activeLogistics.modes.aereo.averageTime || activeLogistics.modes.aereo.estimatedDays || ''}, Marítimo: ${activeLogistics.modes.maritimo.averageTime || activeLogistics.modes.maritimo.estimatedDays || ''}, Terrestre: ${activeLogistics.modes.terrestre.averageTime || activeLogistics.modes.terrestre.estimatedDays || ''}`,
+        newValue: `Aéreo: ${updated.modes.aereo.averageTime}, Marítimo: ${updated.modes.maritimo.averageTime}, Terrestre: ${updated.modes.terrestre.averageTime}`,
+        notes: logisticsNotes || 'Atualização de modais e prazos operacionais'
+      });
+    }
+    setLogisticsSaveFeedback(true);
+    speak("Configurações de logística gravadas com sucesso. A IA responderá imediatamente com os novos prazos.");
+    setTimeout(() => setLogisticsSaveFeedback(false), 4000);
+  };
+
+  // Handler for Saving / Updating Knowledge Item
+  const handleSaveKnowledgeItem = () => {
+    if (!knowledgeForm.question?.trim() || !knowledgeForm.detailedAnswer?.trim()) {
+      alert('Por favor preencha a Pergunta e a Resposta Detalhada da IA.');
+      return;
+    }
+
+    const keywords = keywordsInput
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    const suggestedNextQuestions = nextQuestionsInput
+      .split(';')
+      .map(q => q.trim())
+      .filter(Boolean);
+
+    if (editingKnowledgeItem) {
+      const updated: DynamicKnowledgeItem = {
+        ...editingKnowledgeItem,
+        category: (knowledgeForm.category as any) || 'Geral',
+        question: knowledgeForm.question.trim(),
+        shortAnswer: knowledgeForm.shortAnswer?.trim() || knowledgeForm.detailedAnswer.trim().slice(0, 120),
+        detailedAnswer: knowledgeForm.detailedAnswer.trim(),
+        keywords: keywords.length > 0 ? keywords : editingKnowledgeItem.keywords,
+        suggestedNextQuestions: suggestedNextQuestions.length > 0 ? suggestedNextQuestions : editingKnowledgeItem.suggestedNextQuestions,
+        isActive: knowledgeForm.isActive ?? true,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: adminAuthorName
+      };
+      if (onUpdateKnowledgeItem) {
+        onUpdateKnowledgeItem(updated);
+      }
+      setEditingKnowledgeItem(null);
+      setKnowledgeFeedback('Tópico de conhecimento atualizado com sucesso!');
+    } else {
+      const newItem: DynamicKnowledgeItem = {
+        id: `k-${Date.now()}`,
+        category: (knowledgeForm.category as any) || 'Geral',
+        question: knowledgeForm.question.trim(),
+        shortAnswer: knowledgeForm.shortAnswer?.trim() || knowledgeForm.detailedAnswer.trim().slice(0, 120),
+        detailedAnswer: knowledgeForm.detailedAnswer.trim(),
+        keywords: keywords.length > 0 ? keywords : [knowledgeForm.question.toLowerCase().trim()],
+        suggestedNextQuestions: suggestedNextQuestions.length > 0 ? suggestedNextQuestions : ['Como funciona o Mediador Cabinda?', 'Quais os prazos de entrega?'],
+        isActive: true,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: adminAuthorName
+      };
+      if (onCreateKnowledgeItem) {
+        onCreateKnowledgeItem(newItem);
+      }
+      setIsCreatingKnowledgeItem(false);
+      setKnowledgeFeedback('Novo tópico de conhecimento adicionado com sucesso!');
+    }
+    setTimeout(() => setKnowledgeFeedback(null), 3500);
+  };
+
+  // Handler for Real-Time IA Testing Simulation
+  const handleExecuteSimTest = (customQ?: string) => {
+    const query = (customQ || simQuery).trim();
+    if (!query) return;
+    setSimLoading(true);
+    setTimeout(() => {
+      const result = solveBotQueryLocally(query, activeKnowledge, localLogistics);
+      setSimResult({
+        text: result.text,
+        suggestedQuestions: result.suggestedQuestions,
+        actionLink: result.actionLink,
+        source: 'Motor Dinâmico IA (Sincronizado)'
+      });
+      setSimLoading(false);
+    }, 120);
   };
 
   // Collaborator and Sales Form State
@@ -231,16 +591,30 @@ export default function AdminDashboard({
     name: '',
     productCode: '',
     supplierId: suppliers[0]?.id || '',
-    price: 35000,
+    category: 'feminino',
+    subCategory: 'perucas-cabelos',
+    price: 65000,
+    originalPrice: 78000,
     availability: 'imediata' as 'imediata' | 'sob-pedido' | 'esgotado',
-    stock: 12,
+    stock: 15,
     description: '',
-    photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
-    location: 'Luanda' as 'Luanda' | 'Cabinda',
-    availableFromDate: 'Imediata (Hoje)'
+    photoUrl: 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=500&auto=format&fit=crop&q=60',
+    photos: ['https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=500&auto=format&fit=crop&q=60'] as string[],
+    location: 'Luanda' as 'Luanda' | 'Cabinda' | string,
+    availableFromDate: 'Imediata (Hoje)',
+    warranty: '12 Meses de Garantia',
+    condition: 'novo' as 'novo' | 'seminovo' | 'recondicionado',
+    brand: '',
+    model: '',
+    featured: false
   });
   const [showAddProductForm, setShowAddProductForm] = useState(true);
   const [showStockGallery, setShowStockGallery] = useState<boolean>(false);
+  const [editingProduct, setEditingProduct] = useState<SupplierProduct | null>(null);
+
+  // Security Master & System Wipe Modal State
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [copiedPassKey, setCopiedPassKey] = useState(false);
 
   // Service tab and form states
   const [supplierSubTab, setSupplierSubTab] = useState<'products' | 'services' | 'requests'>('products');
@@ -256,12 +630,51 @@ export default function AdminDashboard({
 
   const SYSTEM_STOCK_GALLERY = [
     {
-      category: "⚙️ Bombas de Água & Hidráulica",
+      category: "👗 Feminino & Mulheres",
       images: [
-        { name: "Bomba Periférica de Água Pedrollo", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=60" },
-        { name: "Motor de Turbina Centrífuga", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=500&auto=format&fit=crop&q=60" },
-        { name: "Válvulas e Tubagens Industriais", url: "https://images.unsplash.com/photo-1542124948-ed391de08a2f?w=500&auto=format&fit=crop&q=60" },
-        { name: "Equipamento Hidráulico de Retenção", url: "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=500&auto=format&fit=crop&q=60" }
+        { name: "Peruca Lace Front 13x4 Cabelo Humano 30'", url: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=500&auto=format&fit=crop&q=60" },
+        { name: "Peruca Bob Lisa Cabelo Virgem 12'", url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=500&auto=format&fit=crop&q=60" },
+        { name: "Vestido Africano Samakaka de Gala", url: "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=500&auto=format&fit=crop&q=60" },
+        { name: "Bolsa de Mão Feminina em Couro", url: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500&auto=format&fit=crop&q=60" },
+        { name: "Sandálias de Salto Alto Luxo", url: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=500&auto=format&fit=crop&q=60" },
+        { name: "Kit Maquilhagem & Cosméticos", url: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "👔 Masculino & Homens",
+      images: [
+        { name: "Fato Executivo Slim Fit 3 Peças", url: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500&auto=format&fit=crop&q=60" },
+        { name: "Camisa Formal Algodão Puro", url: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=500&auto=format&fit=crop&q=60" },
+        { name: "Sapato Clássico Oxford Couro", url: "https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?w=500&auto=format&fit=crop&q=60" },
+        { name: "Relógio Cronógrafo Masculino", url: "https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=500&auto=format&fit=crop&q=60" },
+        { name: "Perfume Amadeirado Masculino", url: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "💻 Computadores & Eletrónicos",
+      images: [
+        { name: "Computador Portátil Profissional i5/i7", url: "https://images.unsplash.com/photo-1496181130204-7552cc14ac1a?w=500&auto=format&fit=crop&q=60" },
+        { name: "Smart TV 55' 4K Ultra HD", url: "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=500&auto=format&fit=crop&q=60" },
+        { name: "Smartphone Flagship 256GB", url: "https://images.unsplash.com/photo-1511707171634-5f897ff02560?w=500&auto=format&fit=crop&q=60" },
+        { name: "Frigorífico Combinado No-Frost", url: "https://images.unsplash.com/photo-1584992236310-6edddc08acff?w=500&auto=format&fit=crop&q=60" },
+        { name: "Ar Condicionado Inverter Split", url: "https://images.unsplash.com/photo-1614633833026-0620455a02cf?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "🌾 Alimentos & Produtos do Campo",
+      images: [
+        { name: "Saco de Bombó Seco de Cabinda 50kg", url: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=60" },
+        { name: "Mandioca Fresca & Batata Doce", url: "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=500&auto=format&fit=crop&q=60" },
+        { name: "Óleo de Palma Puro do Maiombe", url: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=500&auto=format&fit=crop&q=60" },
+        { name: "Feijão Manteiga Nacional", url: "https://images.unsplash.com/photo-1551462147-ff29053bfc14?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "🐂 Animais & Pecuária",
+      images: [
+        { name: "Boi Touro Reprodutor Nelore 450kg", url: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=60" },
+        { name: "Vacas Leiteiras Girolando", url: "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=500&auto=format&fit=crop&q=60" },
+        { name: "Cabritos & Caprinos Raça Bôer", url: "https://images.unsplash.com/photo-1524024973431-2ad916746881?w=500&auto=format&fit=crop&q=60" }
       ]
     },
     {
@@ -269,22 +682,23 @@ export default function AdminDashboard({
       images: [
         { name: "Painel Solar Monocristalino Premium", url: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=500&auto=format&fit=crop&q=60" },
         { name: "Bateria de Lítio e Controlador", url: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=500&auto=format&fit=crop&q=60" },
-        { name: "Sistema Solar Integrado Residencial", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=500&auto=format&fit=crop&q=60" }
+        { name: "Gerador Silencioso a Gasóleo", url: "https://images.unsplash.com/photo-1513828583688-c52646db42da?w=500&auto=format&fit=crop&q=60" }
       ]
     },
     {
-      category: "💻 Computadores & Tecnologias",
+      category: "⚙️ Bombas de Água & Construção",
       images: [
-        { name: "Computador Portátil Profissional i5/i7", url: "https://images.unsplash.com/photo-1496181130204-7552cc14ac1a?w=500&auto=format&fit=crop&q=60" },
-        { name: "Notebook Executivo Windows 11", url: "https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?w=500&auto=format&fit=crop&q=60" },
-        { name: "Impressora Multifuncional Escritório", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=500&auto=format&fit=crop&q=60" }
-      ]
-    },
-    {
-      category: "🛠️ Ferramentas & Construção Geral",
-      images: [
+        { name: "Bomba Periférica de Água Pedrollo", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=60" },
         { name: "Maleta de Ferramentas e Chaves", url: "https://images.unsplash.com/photo-1534224039826-c7a0eda0e6b3?w=500&auto=format&fit=crop&q=60" },
-        { name: "Equipamento de Proteção e Medição", url: "https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=500&auto=format&fit=crop&q=60" }
+        { name: "Tintas & Impermeabilização", url: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "🚗 Auto & Peças Sobressalentes",
+      images: [
+        { name: "Pneus Novos Todo-o-Terreno 4x4", url: "https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=500&auto=format&fit=crop&q=60" },
+        { name: "Bateria Automóvel 12V Alta Capacidade", url: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=500&auto=format&fit=crop&q=60" },
+        { name: "Óleo de Motor Sintético e Filtros", url: "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500&auto=format&fit=crop&q=60" }
       ]
     }
   ];
@@ -769,6 +1183,21 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onChangeRole && (
+            <button
+              onClick={() => {
+                onChangeRole('client');
+                speak("Alternando para o Modo de Pré-visualização da Área do Cliente.");
+              }}
+              className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-slate-900 hover:to-slate-850 text-amber-400 border border-amber-400/50 text-xs font-black py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-md uppercase tracking-wider active:scale-95"
+              id="admin-switch-to-client-view-btn"
+              title="Aceder à área do cliente em modo de pré-visualização de administrador"
+            >
+              <Eye className="w-4 h-4 text-amber-400" />
+              <span>Visualizar Área do Cliente</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               setActiveTab('suppliers');
@@ -811,6 +1240,19 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
           >
             <Printer className="w-4 h-4" />
             Emitir Balanço Comercial
+          </button>
+
+          <button
+            onClick={() => {
+              setShowSecurityModal(true);
+              speak("Abrindo painel de segurança master e gestão de dados do sistema.");
+            }}
+            className="bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-800 text-xs font-black py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+            id="admin-security-and-wipe-btn"
+            title="Credenciais de Administrador & Reinício de Banco de Dados"
+          >
+            <ShieldCheck className="w-4 h-4 text-red-400" />
+            <span>Chave Master & Dados</span>
           </button>
         </div>
       </div>
@@ -3264,24 +3706,385 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                             </span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-800">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Nome do Artigo</label>
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Nome do Artigo *</label>
                               <input
                                 type="text"
-                                placeholder="Ex. HP Laptop Elitebook 840 G8"
+                                placeholder="Ex. HP Laptop Elitebook 840 G8 14' Core i7"
                                 className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400"
                                 value={adminNewProductForm.name}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, name: e.target.value})}
                               />
                             </div>
 
+                            {/* Category & SubCategory Interactive Visual Selection & Dropdowns */}
+                            <div className="sm:col-span-2 space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="block text-[11px] font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                    <Layers className="w-3.5 h-3.5 text-amber-500" />
+                                    1. Escolha a Categoria Principal *
+                                  </label>
+                                  <span className="text-[10px] text-slate-400 font-semibold">
+                                    Sincronizado com a barra horizontal do Cliente
+                                  </span>
+                                </div>
+
+                                {/* Category Visual Buttons Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2.5">
+                                  {MARKETPLACE_CATEGORIES.map((cat) => {
+                                    const isSelected = adminNewProductForm.category === cat.id;
+                                    return (
+                                      <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => {
+                                          const catObj = getCategoryById(cat.id);
+                                          const firstSub = catObj?.subCategories[0]?.id || '';
+                                          setAdminNewProductForm({
+                                            ...adminNewProductForm,
+                                            category: cat.id,
+                                            subCategory: firstSub
+                                          });
+                                        }}
+                                        className={`p-2 rounded-xl text-left transition-all cursor-pointer flex flex-col gap-1 border ${
+                                          isSelected
+                                            ? 'bg-amber-400 border-amber-500 text-slate-950 shadow-xs ring-2 ring-amber-400/50'
+                                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <span className="text-base">{cat.icon}</span>
+                                          {isSelected && (
+                                            <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
+                                          )}
+                                        </div>
+                                        <span className={`text-[10px] font-black leading-tight ${isSelected ? 'text-slate-950' : 'text-slate-800'}`}>
+                                          {cat.name}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Dropdown alternative */}
+                                <select
+                                  aria-label="Categoria do Marketplace"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden text-slate-800"
+                                  value={adminNewProductForm.category}
+                                  onChange={(e) => {
+                                    const newCatId = e.target.value;
+                                    const catObj = getCategoryById(newCatId);
+                                    const firstSub = catObj?.subCategories[0]?.id || '';
+                                    setAdminNewProductForm({
+                                      ...adminNewProductForm,
+                                      category: newCatId,
+                                      subCategory: firstSub
+                                    });
+                                  }}
+                                >
+                                  {MARKETPLACE_CATEGORIES.map((cat) => (
+                                    <option key={cat.id} value={cat.id}>
+                                      {cat.icon} {cat.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* SubCategory Selection */}
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="block text-[11px] font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                    <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                                    2. Escolha a Subcategoria Específica *
+                                  </label>
+                                  <span className="text-[10px] text-slate-400 font-semibold">
+                                    (Ex: Perucas, Vestidos, Bombó, etc.)
+                                  </span>
+                                </div>
+
+                                {/* SubCategory Interactive Chips */}
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {getCategoryById(adminNewProductForm.category)?.subCategories.map((sub) => {
+                                    const isSubSelected = adminNewProductForm.subCategory === sub.id;
+                                    return (
+                                      <button
+                                        key={sub.id}
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({...adminNewProductForm, subCategory: sub.id})}
+                                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                                          isSubSelected
+                                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs ring-2 ring-emerald-500/30'
+                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                        }`}
+                                      >
+                                        <span>{sub.name}</span>
+                                        {isSubSelected && <Check className="w-3 h-3 text-white" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Dropdown alternative */}
+                                <select
+                                  aria-label="Subcategoria Específica"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden text-slate-800"
+                                  value={adminNewProductForm.subCategory}
+                                  onChange={(e) => setAdminNewProductForm({...adminNewProductForm, subCategory: e.target.value})}
+                                >
+                                  {getCategoryById(adminNewProductForm.category)?.subCategories.map((sub) => (
+                                    <option key={sub.id} value={sub.id}>
+                                      {sub.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Smart Real-Time Auto-Routing Notification Banner */}
+                              <div className="bg-linear-to-r from-amber-50 to-emerald-50 border border-amber-200/80 p-3 rounded-xl flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-slate-950 shrink-0 font-black text-sm shadow-xs">
+                                    ⚡
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                      <span>Classificação Automática Ativa:</span>
+                                      <span className="text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 font-bold">
+                                        {getCategoryById(adminNewProductForm.category)?.icon} {getCategoryById(adminNewProductForm.category)?.name}
+                                      </span>
+                                      <span>➔</span>
+                                      <span className="text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
+                                        {getSubCategoryName(adminNewProductForm.category, adminNewProductForm.subCategory)}
+                                      </span>
+                                    </p>
+                                    <p className="text-[10px] text-slate-600 mt-0.5">
+                                      Ao publicar, este artigo será automaticamente indexado e visível na barra horizontal do cliente nesta categoria e subcategoria.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Quick Auto-Fill Suggestions based on Category / Subcategory */}
+                              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3 text-amber-500" />
+                                  Sugestões Rápidas de Nomes (Clique para preencher):
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {adminNewProductForm.category === 'feminino' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Peruca Frontal 13x4 100% Cabelo Humano Brasileiro 30'",
+                                          price: 65000,
+                                          originalPrice: 78000,
+                                          description: "Peruca lace frontal 13x4 em cabelo humano virgem de alta densidade (180%), sem químicos, com nós descoloridos e textura natural.",
+                                          photoUrl: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Peruca Frontal 13x4 30'
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Peruca Bob Curta Lisa HD Lace 12' Cabelo Virgem",
+                                          price: 45000,
+                                          originalPrice: 52000,
+                                          description: "Peruca curta corte Bob liso brilhante, lace transparente HD e fixação segura com pentes internos.",
+                                          photoUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Peruca Bob Curta 12'
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Vestido Africano Samakaka Elegante Festa",
+                                          price: 35000,
+                                          originalPrice: 42000,
+                                          description: "Vestido longo em tecido Samakaka autêntico, corte acinturado e acabamento de alta alfaiataria.",
+                                          photoUrl: "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Vestido Samakaka Festa
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Bolsa de Mão Feminina Couro Genuíno Estruturada",
+                                          price: 28000,
+                                          originalPrice: 34000,
+                                          description: "Bolsa executiva em pele genuína com detalhes dourados e compartimentos espaçosos.",
+                                          photoUrl: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Bolsa Feminina Couro
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {adminNewProductForm.category === 'masculino' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Fato Executivo Slim Fit 3 Peças Italiano",
+                                          price: 85000,
+                                          originalPrice: 95000,
+                                          description: "Fato completo de 3 peças (blazer, colete e calça), corte moderno slim fit em tecido nobre.",
+                                          photoUrl: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Fato Executivo 3 Peças
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Sapato Oxford Masculino Couro Genuíno",
+                                          price: 38000,
+                                          originalPrice: 45000,
+                                          description: "Calçado clássico Oxford em cabedal de alta durabilidade com sola cosida.",
+                                          photoUrl: "https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Sapato Oxford Couro
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {adminNewProductForm.category === 'alimentos' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Saco de Bombó Seco de Cabinda Selecionado 50kg",
+                                          price: 24000,
+                                          originalPrice: 28000,
+                                          description: "Bombó seco tradicional de primeira colheita das lavras de Cabinda, seco ao sol natural e sem impurezas.",
+                                          photoUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Saco de Bombó Seco 50kg
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Óleo de Palma Puro do Maiombe 5 Litros",
+                                          price: 9500,
+                                          originalPrice: 11000,
+                                          description: "Óleo de palma virgem extraído artesanalmente nas matas do Maiombe, 100% puro e aromático.",
+                                          photoUrl: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Óleo de Palma Maiombe 5L
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {adminNewProductForm.category === 'animais' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Boi Touro Reprodutor Nelore Registado 450kg",
+                                          price: 650000,
+                                          originalPrice: 720000,
+                                          description: "Touro reprodutor Nelore puro de origem, vacinado e desparasitado com histórico zootécnico comprovado.",
+                                          photoUrl: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Touro Nelore 450kg
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Cabritos & Caprinos Raça Bôer Macho/Fêmea",
+                                          price: 65000,
+                                          originalPrice: 75000,
+                                          description: "Caprinos jovens de raça Bôer de rápido ganho de peso, criados a pasto natural.",
+                                          photoUrl: "https://images.unsplash.com/photo-1524024973431-2ad916746881?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Cabritos Raça Bôer
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {adminNewProductForm.category === 'eletronicos' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Laptop HP EliteBook 840 G8 14' Core i7 16GB 512GB SSD",
+                                          price: 340000,
+                                          originalPrice: 380000,
+                                          description: "Computador portátil profissional ultrafino em alumínio, teclado retroiluminado e bateria com até 10h de autonomia.",
+                                          photoUrl: "https://images.unsplash.com/photo-1496181130204-7552cc14ac1a?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Laptop HP Core i7
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Smart TV 55' 4K UHD HDR com Wi-Fi Integrado",
+                                          price: 215000,
+                                          originalPrice: 245000,
+                                          description: "Televisor inteligente com comandos de voz, Bluetooth, Netflix e YouTube com qualidade de imagem cristalina.",
+                                          photoUrl: "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Smart TV 55' 4K
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
                             <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço Base (AOA)</label>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço de Venda (AOA) *</label>
                               <input
                                 type="number"
                                 className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400 text-slate-800"
                                 value={adminNewProductForm.price === 0 ? '' : adminNewProductForm.price}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, price: Number(e.target.value)})}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Preço Original / Anterior (AOA) (Para exibir desconto)</label>
+                              <input
+                                type="number"
+                                placeholder="Ex. 42000"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden focus:border-amber-400 text-slate-800"
+                                value={adminNewProductForm.originalPrice || ''}
+                                onChange={(e) => setAdminNewProductForm({...adminNewProductForm, originalPrice: Number(e.target.value)})}
                               />
                             </div>
 
@@ -3309,6 +4112,30 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                             </div>
 
                             <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Condição do Artigo</label>
+                              <select
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden text-slate-800"
+                                value={adminNewProductForm.condition || 'novo'}
+                                onChange={(e) => setAdminNewProductForm({...adminNewProductForm, condition: e.target.value as any})}
+                              >
+                                <option value="novo">Novo / Selado na Caixa ✨</option>
+                                <option value="seminovo">Semi-novo / Impecável 👍</option>
+                                <option value="recondicionado">Recondicionado Certificado 🔧</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Garantia / Suporte</label>
+                              <input
+                                type="text"
+                                placeholder="Ex. 12 Meses de Garantia Oficial"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400 text-slate-800"
+                                value={adminNewProductForm.warranty || ''}
+                                onChange={(e) => setAdminNewProductForm({...adminNewProductForm, warranty: e.target.value})}
+                              />
+                            </div>
+
+                            <div>
                               <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Localização Física (Empresa)</label>
                               <select
                                 className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold focus:outline-hidden outline-hidden text-slate-800"
@@ -3332,31 +4159,99 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                             </div>
 
                             <div className="sm:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Descrição Curta</label>
+                              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Descrição Detalhada do Artigo</label>
                               <textarea
-                                placeholder="Insira detalhes técnicos, voltas, etc..."
+                                placeholder="Insira detalhes técnicos, especificações, dimensões, voltas, etc..."
                                 className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden focus:border-amber-400 h-16 text-slate-800"
                                 value={adminNewProductForm.description}
                                 onChange={(e) => setAdminNewProductForm({...adminNewProductForm, description: e.target.value})}
                               />
                             </div>
 
-                            <div className="sm:col-span-2 space-y-2">
+                            {/* Multi-Photo Manager Section */}
+                            <div className="sm:col-span-2 space-y-3 bg-slate-100/70 p-3.5 rounded-2xl border border-slate-250">
                               <div className="flex items-center justify-between">
-                                <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Fotografia do Artigo (Galeria ou Link) *</label>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowStockGallery(!showStockGallery)}
-                                  className="text-[10px] bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
-                                >
-                                  📂 {showStockGallery ? "Fechar Galeria" : "Escolher da Galeria de Artigos"}
-                                </button>
+                                <div>
+                                  <label className="block text-xs font-black text-slate-800">📸 Galeria de Fotos do Artigo (Até 8 Fotos)</label>
+                                  <p className="text-[10px] text-slate-500 font-medium">A primeira foto é a capa principal. Pode adicionar até 8 fotos por artigo.</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                                    {(adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean).length}/8 Fotos
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowStockGallery(!showStockGallery)}
+                                    className="text-[10px] bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
+                                  >
+                                    📂 {showStockGallery ? "Fechar Banco" : "Banco de Imagens"}
+                                  </button>
+                                </div>
                               </div>
+
+                              {/* Gallery Thumbnails List */}
+                              {((adminNewProductForm.photos && adminNewProductForm.photos.length > 0) ? adminNewProductForm.photos : [adminNewProductForm.photoUrl]).filter(Boolean).length > 0 && (
+                                <div className="space-y-1.5">
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Fotos cadastradas para este artigo:</span>
+                                  <div className="flex flex-wrap gap-2.5">
+                                    {((adminNewProductForm.photos && adminNewProductForm.photos.length > 0) ? adminNewProductForm.photos : [adminNewProductForm.photoUrl]).filter(Boolean).map((photo, idx) => {
+                                      const isMain = idx === 0 || photo === adminNewProductForm.photoUrl;
+                                      return (
+                                        <div key={idx} className="relative group w-20 h-20 rounded-xl overflow-hidden border-2 bg-white shadow-xs transition-all flex items-center justify-center">
+                                          <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                          
+                                          {isMain && (
+                                            <div className="absolute top-1 left-1 bg-amber-400 text-slate-950 font-black text-[7.5px] px-1 py-0.5 rounded shadow">
+                                              Capa
+                                            </div>
+                                          )}
+
+                                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition-opacity p-1">
+                                            {!isMain && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentPhotos = (adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean);
+                                                  const reordered = [photo, ...currentPhotos.filter(p => p !== photo)];
+                                                  setAdminNewProductForm({
+                                                    ...adminNewProductForm,
+                                                    photoUrl: photo,
+                                                    photos: reordered
+                                                  });
+                                                }}
+                                                className="text-[7.5px] bg-amber-400 text-slate-950 font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-300"
+                                              >
+                                                Tornar Capa
+                                              </button>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const currentPhotos = (adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean);
+                                                const filtered = currentPhotos.filter((_, i) => i !== idx);
+                                                const nextMain = filtered[0] || '';
+                                                setAdminNewProductForm({
+                                                  ...adminNewProductForm,
+                                                  photoUrl: nextMain,
+                                                  photos: filtered
+                                                });
+                                              }}
+                                              className="text-[8px] bg-red-500 text-white font-bold px-1.5 py-0.5 rounded cursor-pointer hover:bg-red-600"
+                                            >
+                                              Remover ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
 
                               {showStockGallery && (
                                 <div className="bg-slate-100 border border-slate-250 p-3.5 rounded-2xl space-y-3 animate-fade-in text-slate-850">
                                   <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">🗂️ Galeria de Fotos de Artigos do Sistema</p>
-                                  <p className="text-[9px] text-slate-450 -mt-1.5 font-medium">Selecione uma imagem realista em stock para associar ao seu produto instantaneamente.</p>
+                                  <p className="text-[9px] text-slate-450 -mt-1.5 font-medium">Clique para adicionar uma imagem à galeria do produto (máx 8 fotos).</p>
                                   
                                   <div className="space-y-3 max-h-56 overflow-y-auto scrollbar-thin">
                                     {SYSTEM_STOCK_GALLERY.map((cat, ci) => (
@@ -3364,11 +4259,24 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                         <h5 className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{cat.category}</h5>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                           {cat.images.map((img, imgi) => {
-                                            const isSelected = adminNewProductForm.photoUrl === img.url;
+                                            const currentPhotos = (adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean);
+                                            const isSelected = currentPhotos.includes(img.url);
                                             return (
                                               <div 
                                                 key={imgi}
-                                                onClick={() => setAdminNewProductForm({ ...adminNewProductForm, photoUrl: img.url })}
+                                                onClick={() => {
+                                                  if (isSelected) return;
+                                                  if (currentPhotos.length >= 8) {
+                                                    showModalAlert("Limite Atingido", "Pode adicionar no máximo 8 fotos por artigo.", "warning");
+                                                    return;
+                                                  }
+                                                  const updated = [...currentPhotos, img.url];
+                                                  setAdminNewProductForm({
+                                                    ...adminNewProductForm,
+                                                    photoUrl: updated[0],
+                                                    photos: updated
+                                                  });
+                                                }}
                                                 className={`relative aspect-video rounded-lg overflow-hidden border cursor-pointer transition-all hover:scale-103 active:scale-97 bg-white ${
                                                   isSelected ? 'ring-2 ring-amber-500 border-transparent shadow-md' : 'border-slate-200'
                                                 }`}
@@ -3400,13 +4308,16 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                               
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                                 {/* Upload Box */}
-                                <div className="border-2 border-dashed border-slate-200 hover:border-amber-400 bg-white rounded-2xl p-4 transition-all flex flex-col items-center justify-center text-center relative group min-h-[130px] cursor-pointer">
+                                <div className="border-2 border-dashed border-slate-300 hover:border-amber-400 bg-white rounded-2xl p-4 transition-all flex flex-col items-center justify-center text-center relative group min-h-[110px] cursor-pointer">
                                   <input 
                                     type="file" 
                                     accept="image/*"
+                                    multiple
                                     onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
+                                      const files: File[] = e.target.files ? Array.from(e.target.files) : [];
+                                      if (files.length === 0) return;
+                                      
+                                      files.forEach((file: File) => {
                                         const reader = new FileReader();
                                         reader.onloadend = () => {
                                           const base64Str = reader.result as string;
@@ -3414,8 +4325,8 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                           img.src = base64Str;
                                           img.onload = () => {
                                             const canvas = document.createElement('canvas');
-                                            const MAX_WIDTH = 400;
-                                            const MAX_HEIGHT = 400;
+                                            const MAX_WIDTH = 500;
+                                            const MAX_HEIGHT = 500;
                                             let width = img.width;
                                             let height = img.height;
                                             if (width > MAX_WIDTH || height > MAX_HEIGHT) {
@@ -3430,82 +4341,88 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                             canvas.width = width;
                                             canvas.height = height;
                                             const ctx = canvas.getContext('2d');
-                                            if (ctx) {
-                                              ctx.drawImage(img, 0, 0, width, height);
-                                              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                                              setAdminNewProductForm({
-                                                ...adminNewProductForm,
-                                                photoUrl: compressedBase64
-                                              });
-                                            } else {
-                                              setAdminNewProductForm({
-                                                ...adminNewProductForm,
-                                                photoUrl: base64Str
-                                              });
-                                            }
-                                          };
-                                          img.onerror = () => {
-                                            setAdminNewProductForm({
-                                              ...adminNewProductForm,
-                                              photoUrl: base64Str
+                                            const finalBase64 = ctx ? (ctx.drawImage(img, 0, 0, width, height), canvas.toDataURL('image/jpeg', 0.75)) : base64Str;
+                                            
+                                            setAdminNewProductForm(prev => {
+                                              const current = (prev.photos || [prev.photoUrl]).filter(Boolean);
+                                              if (current.length >= 8) return prev;
+                                              const nextList = [...current, finalBase64];
+                                              return {
+                                                ...prev,
+                                                photoUrl: nextList[0],
+                                                photos: nextList
+                                              };
                                             });
                                           };
                                         };
                                         reader.readAsDataURL(file);
-                                      }
+                                      });
                                     }}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                   />
-                                  <div className="space-y-1.5 pointer-events-none">
-                                    <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-lg">
+                                  <div className="space-y-1 pointer-events-none">
+                                    <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-base">
                                       📸
                                     </div>
-                                    <p className="text-[11px] font-bold text-slate-700">Escolher da Galeria / Câmara</p>
-                                    <p className="text-[9.5px] text-slate-400">Toque aqui para abrir a galeria do telemóvel</p>
+                                    <p className="text-[11px] font-bold text-slate-700">Adicionar Foto do Telemóvel / PC</p>
+                                    <p className="text-[9px] text-slate-450">Selecione uma ou mais fotos para anexar</p>
                                   </div>
                                 </div>
 
-                                {/* Preview / Manual URL field */}
-                                <div className="bg-slate-100/50 border rounded-2xl p-3.5 flex flex-col justify-between space-y-3">
-                                  <div className="flex items-center gap-3">
-                                    {adminNewProductForm.photoUrl ? (
-                                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border bg-white shrink-0 shadow-xs">
-                                        <img 
-                                          src={adminNewProductForm.photoUrl} 
-                                          alt="Preview" 
-                                          className="w-full h-full object-cover"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => setAdminNewProductForm({...adminNewProductForm, photoUrl: ''})}
-                                          className="absolute top-0.5 right-0.5 bg-red-500 text-white w-4.5 h-4.5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm cursor-pointer z-20"
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="w-16 h-16 rounded-xl border border-dashed border-slate-300 bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] shrink-0">
-                                        Sem foto
-                                      </div>
-                                    )}
-                                    <div className="text-left">
-                                      <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider block">Foto Associada:</span>
-                                      <span className={`text-[10px] font-bold ${adminNewProductForm.photoUrl ? 'text-emerald-600' : 'text-amber-500'}`}>
-                                        {adminNewProductForm.photoUrl ? (adminNewProductForm.photoUrl.startsWith('data:') ? '✓ Foto da Galeria Selecionada' : '✓ Link URL Ativo') : '⚠️ Nenhuma foto associada'}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <label className="block text-[9.5px] font-bold text-slate-400">Ou introduzir Link URL directo:</label>
+                                {/* Manual URL Box */}
+                                <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col justify-center space-y-2">
+                                  <label className="block text-[9.5px] font-bold text-slate-500">Ou adicionar Link URL de Foto:</label>
+                                  <div className="flex gap-2">
                                     <input
                                       type="text"
-                                      placeholder="https://exemplo.com/imagem.png"
-                                      className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[10px] font-medium focus:outline-hidden text-slate-800"
-                                      value={adminNewProductForm.photoUrl.startsWith('data:') ? '' : adminNewProductForm.photoUrl}
-                                      onChange={(e) => setAdminNewProductForm({...adminNewProductForm, photoUrl: e.target.value})}
+                                      placeholder="https://exemplo.com/foto.jpg"
+                                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[10px] font-medium focus:outline-hidden text-slate-800"
+                                      id="admin-add-photo-url-input"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const val = (e.currentTarget as HTMLInputElement).value.trim();
+                                          if (val) {
+                                            const current = (adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean);
+                                            if (current.length >= 8) {
+                                              showModalAlert("Limite Atingido", "Pode adicionar no máximo 8 fotos por artigo.", "warning");
+                                              return;
+                                            }
+                                            const updated = [...current, val];
+                                            setAdminNewProductForm({
+                                              ...adminNewProductForm,
+                                              photoUrl: updated[0],
+                                              photos: updated
+                                            });
+                                            (e.currentTarget as HTMLInputElement).value = '';
+                                          }
+                                        }
+                                      }}
                                     />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const inputEl = document.getElementById('admin-add-photo-url-input') as HTMLInputElement;
+                                        const val = inputEl?.value.trim();
+                                        if (val) {
+                                          const current = (adminNewProductForm.photos || [adminNewProductForm.photoUrl]).filter(Boolean);
+                                          if (current.length >= 8) {
+                                            showModalAlert("Limite Atingido", "Pode adicionar no máximo 8 fotos por artigo.", "warning");
+                                            return;
+                                          }
+                                          const updated = [...current, val];
+                                          setAdminNewProductForm({
+                                            ...adminNewProductForm,
+                                            photoUrl: updated[0],
+                                            photos: updated
+                                          });
+                                          inputEl.value = '';
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-[10px] cursor-pointer"
+                                    >
+                                      Adicionar
+                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -3522,21 +4439,33 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                 }
 
                                 const generatedCode = `PRD-${1000 + supplierProducts.length + 1}`;
+                                const photosList = (adminNewProductForm.photos && adminNewProductForm.photos.length > 0)
+                                  ? adminNewProductForm.photos.filter(Boolean)
+                                  : [adminNewProductForm.photoUrl].filter(Boolean);
 
                                 const newProd: SupplierProduct = {
                                   id: `sup_prod-${Date.now()}`,
                                   productCode: generatedCode,
                                   supplierId: curSup.id,
+                                  category: adminNewProductForm.category,
+                                  subCategory: adminNewProductForm.subCategory,
                                   name: adminNewProductForm.name,
                                   description: adminNewProductForm.description,
                                   price: adminNewProductForm.price,
-                                  photoUrl: adminNewProductForm.photoUrl,
+                                  originalPrice: adminNewProductForm.originalPrice || undefined,
+                                  photoUrl: photosList[0] || adminNewProductForm.photoUrl,
+                                  photos: photosList.length > 0 ? photosList : [adminNewProductForm.photoUrl],
                                   availability: adminNewProductForm.availability,
                                   stock: adminNewProductForm.stock,
                                   published: true,
                                   sponsored: false,
+                                  featured: adminNewProductForm.featured || false,
                                   location: adminNewProductForm.location,
                                   availableFromDate: adminNewProductForm.availableFromDate || 'Imediata (Hoje)',
+                                  warranty: adminNewProductForm.warranty || '12 Meses de Garantia Oficial',
+                                  condition: adminNewProductForm.condition || 'novo',
+                                  rating: 4.8,
+                                  reviewsCount: 1,
                                   createdAt: new Date().toISOString()
                                 };
 
@@ -3545,22 +4474,33 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                 // reset
                                 setAdminNewProductForm({
                                   name: '',
+                                  productCode: '',
+                                  supplierId: curSup.id,
+                                  category: 'eletronicos',
+                                  subCategory: 'computadores',
                                   price: 35000,
+                                  originalPrice: 42000,
                                   availability: 'imediata',
                                   stock: 12,
                                   description: '',
                                   photoUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
+                                  photos: ['https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60'],
                                   location: 'Luanda',
-                                  availableFromDate: 'Imediata (Hoje)'
+                                  availableFromDate: 'Imediata (Hoje)',
+                                  warranty: '12 Meses de Garantia',
+                                  condition: 'novo',
+                                  brand: '',
+                                  model: '',
+                                  featured: false
                                 });
                                 setShowAddProductForm(false);
 
                                 setCustomDialog({
                                   title: "Artigo Homologado Publicado! 🚀",
-                                  message: `O artigo corporativo "${newProd.name}" foi cadastrado com o Código de Identidade "${generatedCode}" e publicado no mercado de Cabinda.\n\nDeseja alternar agora mesmo para a aba de Cliente para ver o mercado de artigos e confirmar a exibição?`,
+                                  message: `O artigo corporativo "${newProd.name}" foi cadastrado com o Código de Identidade "${generatedCode}" e publicado no marketplace de Cabinda.\n\nDeseja alternar agora mesmo para o Marketplace para ver o produto e confirmar a exibição?`,
                                   type: "success",
                                   primaryAction: {
-                                    label: "Sim, Ir Ver no Mercado ➔",
+                                    label: "Sim, Ir Ver no Marketplace ➔",
                                     onClick: () => {
                                       if (onChangeRole) onChangeRole('client');
                                       if (onChangeView) onChangeView('mercado-fornecedores');
@@ -3569,7 +4509,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                   secondaryActionLabel: "Permanecer na Gestão"
                                 });
                               }}
-                              className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black cursor-pointer shadow-xs transition-colors"
+                              className="px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black cursor-pointer shadow-xs transition-colors"
                             >
                               Finalizar Publicação de Artigo
                             </button>
@@ -3617,6 +4557,15 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                         </div>
                                         <h5 className="font-bold text-xs text-slate-850 truncate">{prod.name}</h5>
                                         <p className="text-[11px] text-slate-800 font-mono font-black tracking-tight">{prod.price.toLocaleString('pt-AO')} AOA</p>
+
+                                        <div className="flex items-center gap-1 my-1 flex-wrap">
+                                          <span className="text-[8px] bg-amber-50 text-amber-900 font-bold px-1.5 py-0.5 rounded-md border border-amber-200">
+                                            {getCategoryById(prod.category)?.icon || '📦'} {getCategoryById(prod.category)?.name || prod.category || 'Geral'}
+                                          </span>
+                                          <span className="text-[8px] bg-emerald-50 text-emerald-800 font-bold px-1.5 py-0.5 rounded-md border border-emerald-200">
+                                            {getSubCategoryName(prod.category, prod.subCategory) || prod.subCategory || 'Geral'}
+                                          </span>
+                                        </div>
                                         
                                         <div className="text-[9.5px] text-slate-500 font-semibold flex flex-col gap-0.5 my-1">
                                           <span>📍 Local: <strong>{prod.location || 'Luanda'}</strong></span>
@@ -3637,7 +4586,17 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
 
                                     {/* Quick controllers */}
                                     <div className="flex gap-1.5 border-t border-slate-200/60 pt-2 flex-wrap items-center justify-between font-semibold">
-                                      <div className="flex gap-1">
+                                      <div className="flex gap-1 flex-wrap">
+                                        {/* Edit Product */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingProduct(prod)}
+                                          className="px-2 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-[9px] font-black uppercase cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                                        >
+                                          <Edit3 className="w-2.5 h-2.5" />
+                                          Editar ✏️
+                                        </button>
+
                                         {/* Toggle state */}
                                         <button
                                           type="button"
@@ -4921,7 +5880,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
         </div>
       )}
 
-      {/* CHATBOT 24/7 IA MANAGEMENT TAB */}
+      {/* CHATBOT 24/7 IA & LOGISTICS CONFIGURATION MANAGEMENT TAB */}
       {activeTab === 'chatbot' && (
         <div className="space-y-6 animate-fade-in" id="adm-chatbot-section">
           
@@ -4937,317 +5896,1349 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                   </div>
                   <div>
                     <h2 className="text-xl font-black font-display tracking-tight text-white flex items-center gap-2">
-                      Assistente Virtual IA 24/7
+                      Gestão de Logística & IA 24/7
                       <span className="text-[10px] bg-emerald-500 text-white font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        Ativo 24 Horas
+                        Base Dinâmica Ativa
                       </span>
                     </h2>
                     <p className="text-xs text-slate-300 font-medium">
-                      Atendimento inteligente ininterrupto para clientes do enclave de Cabinda e Luanda
+                      Configure modais, prazos oficiais, base de conhecimento e parâmetros do Assistente IA 24/7 em tempo real
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <div className="bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-2xl flex items-center gap-3">
                   <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></div>
                   <div className="text-right">
-                    <span className="text-[10px] text-slate-400 block font-bold uppercase">Motor IA</span>
-                    <span className="text-xs font-black text-amber-300">Gemini 3.6 + Base Local</span>
+                    <span className="text-[10px] text-slate-400 block font-bold uppercase">Sincronização IA</span>
+                    <span className="text-xs font-black text-amber-300">Tempo Real (0s delay)</span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Sub-Navigation Tabs */}
+            <div className="flex flex-wrap gap-2 pt-5 border-t border-slate-800/80 mt-5 relative z-10">
+              <button
+                type="button"
+                onClick={() => { setBotSubTab('logistica'); speak("Painel de configurações de logística aberto."); }}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  botSubTab === 'logistica'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                <span>Configurações de Logística (Prazos & Modais)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setBotSubTab('knowledge'); speak("Base de conhecimento dinâmica aberta."); }}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  botSubTab === 'knowledge'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Base de Conhecimento Dinâmica ({activeKnowledge.length} Tópicos)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setBotSubTab('audit'); speak("Histórico de auditoria e logs aberto."); }}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  botSubTab === 'audit'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <History className="w-4 h-4" />
+                <span>Histórico de Auditoria ({activeAuditLogs.length} Registos)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setBotSubTab('settings_sim'); speak("Parâmetros do bot e simulador abertos."); }}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                  botSubTab === 'settings_sim'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'bg-slate-800/70 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Simulador em Tempo Real & Regras</span>
+              </button>
+            </div>
           </div>
 
-          {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                <Bot className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400">Total Dúvidas 24/7</span>
-                <p className="text-lg font-black text-slate-900 font-display">1.482</p>
-                <span className="text-[9px] text-emerald-600 font-bold">+28% este mês</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400">Atendimento Noturno</span>
-                <p className="text-lg font-black text-slate-900 font-display">624</p>
-                <span className="text-[9px] text-slate-500 font-medium">Fora de expediente</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                <Zap className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400">Tempo de Resposta</span>
-                <p className="text-lg font-black text-slate-900 font-display">Instantâneo</p>
-                <span className="text-[9px] text-blue-600 font-bold">0ms / local + nuvem</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-150 shadow-xs flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                <Shield className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400">Taxa de Resolução</span>
-                <p className="text-lg font-black text-slate-900 font-display">94,2%</p>
-                <span className="text-[9px] text-emerald-600 font-bold">Sem transbordo humano</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Main 2-Column Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Left Column: Bot Settings Form */}
-            <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-3xl border border-slate-150 shadow-sm space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-                <div className="flex items-center gap-2">
-                  <SettingsIcon className="w-5 h-5 text-amber-500" />
-                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-display">
-                    Parâmetros e Regras do Bot
-                  </h3>
+          {/* Feedbacks */}
+          {logisticsSaveFeedback && (
+            <div className="bg-emerald-500 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-6 h-6 shrink-0" />
+                <div>
+                  <h4 className="font-black text-sm">Configurações de Logística Salvas com Sucesso!</h4>
+                  <p className="text-xs text-emerald-100 font-medium">
+                    A IA do Mediador Cabinda e todos os canais de atendimento já estão a responder automaticamente com os novos prazos e dados configurados.
+                  </p>
                 </div>
-                {botSaveFeedback && (
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2.5 py-1 rounded-lg animate-pulse">
-                    ✓ Guardado com Sucesso!
+              </div>
+              <span className="text-xs font-mono bg-white/20 px-3 py-1 rounded-xl">Auditado ✓</span>
+            </div>
+          )}
+
+          {knowledgeFeedback && (
+            <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 shrink-0 text-amber-300" />
+                <div>
+                  <h4 className="font-black text-sm">{knowledgeFeedback}</h4>
+                  <p className="text-xs text-blue-100 font-medium">
+                    A base de dados de FAQ e o cérebro da IA foram atualizados sem necessidade de alterar código.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 1: LOGÍSTICA (Prazos, Modais, Taxas, Armazéns) */}
+          {botSubTab === 'logistica' && (
+            <div className="space-y-6 animate-fade-in">
+              
+              {/* Context Box */}
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 text-amber-950">
+                <Truck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-extrabold text-amber-900">
+                    Sincronização Direta com o Assistente IA 24/7
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    Qualquer alteração efetuada nos prazos abaixo (ex: alterar Marítimo de 2–3 dias para 3–4 dias) é injetada automaticamente no contexto da IA. Quando os clientes perguntarem no chat sobre prazos de entrega marítimos ou aéreos, a IA responderá instantaneamente com os novos valores configurados aqui, sempre tratando os prazos como estimativas médias.
+                  </p>
+                </div>
+              </div>
+
+              {/* 3 Modals Transport Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                
+                {/* 1. Via Aérea */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
+                        <Plane className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-slate-900">Via Aérea (Luanda → Cabinda)</h3>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Cargas Expressas & Urgentes</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Prazo Médio Estimado
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.aereo.estimatedDays || localLogistics.modes.aereo.averageTime || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            aereo: {
+                              ...localLogistics.modes.aereo,
+                              estimatedDays: e.target.value,
+                              averageTime: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 1 dia (24 a 48 horas)"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Custo Estimado por Quilo
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.aereo.costPerKg || localLogistics.modes.aereo.costEstimate || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            aereo: {
+                              ...localLogistics.modes.aereo,
+                              costPerKg: e.target.value,
+                              costEstimate: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 2.500 AOA / kg"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Descrição Operacional
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={localLogistics.modes.aereo.description || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            aereo: { ...localLogistics.modes.aereo, description: e.target.value }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Recomendado Para
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.aereo.recommendedFor || localLogistics.modes.aereo.recommendation || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            aereo: {
+                              ...localLogistics.modes.aereo,
+                              recommendedFor: e.target.value,
+                              recommendation: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: Eletrónicos, medicamentos, encomendas urgentes"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Estado do Modal
+                      </label>
+                      <select
+                        value={localLogistics.modes.aereo.status}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            aereo: { ...localLogistics.modes.aereo, status: e.target.value as any }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="ativo">🟢 Ativo (Operacional Normal)</option>
+                        <option value="condicionado">🟡 Condicionado (Meteorologia/Voo)</option>
+                        <option value="pausado">🔴 Pausado Temporariamente</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Via Marítima */}
+                <div className="bg-white p-5 rounded-3xl border border-amber-200 shadow-sm space-y-4 relative overflow-hidden ring-2 ring-amber-400/20">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                        <Ship className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-slate-900">Via Marítima (Navios / Cabotagem)</h3>
+                        <span className="text-[10px] text-emerald-600 font-bold uppercase">Mais Económico & Popular</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Prazo Médio Estimado
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.maritimo.estimatedDays || localLogistics.modes.maritimo.averageTime || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            maritimo: {
+                              ...localLogistics.modes.maritimo,
+                              estimatedDays: e.target.value,
+                              averageTime: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 2–3 dias (ou 3–4 dias)"
+                        className="w-full p-2.5 bg-slate-50 border border-amber-300 rounded-xl text-xs font-black text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Custo Estimado por Quilo
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.maritimo.costPerKg || localLogistics.modes.maritimo.costEstimate || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            maritimo: {
+                              ...localLogistics.modes.maritimo,
+                              costPerKg: e.target.value,
+                              costEstimate: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 450 AOA / kg"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Descrição Operacional
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={localLogistics.modes.maritimo.description || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            maritimo: { ...localLogistics.modes.maritimo, description: e.target.value }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Recomendado Para
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.maritimo.recommendedFor || localLogistics.modes.maritimo.recommendation || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            maritimo: {
+                              ...localLogistics.modes.maritimo,
+                              recommendedFor: e.target.value,
+                              recommendation: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: Cargas gerais, alimentos, móveis, materiais pesados"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Estado do Modal
+                      </label>
+                      <select
+                        value={localLogistics.modes.maritimo.status}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            maritimo: { ...localLogistics.modes.maritimo, status: e.target.value as any }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="ativo">🟢 Ativo (Operacional Normal)</option>
+                        <option value="condicionado">🟡 Condicionado (Aguarda acostagem)</option>
+                        <option value="pausado">🔴 Pausado Temporariamente</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Via Terrestre */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-black">
+                        <Truck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-slate-900">Via Terrestre (Transfronteiriça)</h3>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">Cargas Volumosas e Industriais</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Prazo Médio Estimado
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.terrestre.estimatedDays || localLogistics.modes.terrestre.averageTime || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            terrestre: {
+                              ...localLogistics.modes.terrestre,
+                              estimatedDays: e.target.value,
+                              averageTime: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 7–8 dias ou mais"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Custo Estimado por Quilo
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.terrestre.costPerKg || localLogistics.modes.terrestre.costEstimate || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            terrestre: {
+                              ...localLogistics.modes.terrestre,
+                              costPerKg: e.target.value,
+                              costEstimate: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: 350 AOA / kg"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Descrição Operacional
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={localLogistics.modes.terrestre.description || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            terrestre: { ...localLogistics.modes.terrestre, description: e.target.value }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Recomendado Para
+                      </label>
+                      <input
+                        type="text"
+                        value={localLogistics.modes.terrestre.recommendedFor || localLogistics.modes.terrestre.recommendation || ''}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            terrestre: {
+                              ...localLogistics.modes.terrestre,
+                              recommendedFor: e.target.value,
+                              recommendation: e.target.value
+                            }
+                          }
+                        })}
+                        placeholder="Ex: Grandes frotas, viaturas, materiais de construção"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Estado do Modal
+                      </label>
+                      <select
+                        value={localLogistics.modes.terrestre.status}
+                        onChange={(e) => setLocalLogistics({
+                          ...localLogistics,
+                          modes: {
+                            ...localLogistics.modes,
+                            terrestre: { ...localLogistics.modes.terrestre, status: e.target.value as any }
+                          }
+                        })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden"
+                      >
+                        <option value="ativo">🟢 Ativo (Operacional Normal)</option>
+                        <option value="condicionado">🟡 Condicionado (Trânsito Aduaneiro RDC)</option>
+                        <option value="pausado">🔴 Pausado Temporariamente</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* General Logistics, Warehouses, Fees & Policies */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-amber-500" />
+                    <h3 className="font-black text-sm text-slate-900 font-display">
+                      Armazéns Oficiais, Taxas & Políticas de Garantia
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Última Atualização: {new Date(localLogistics.lastUpdated).toLocaleString('pt-PT')}
                   </span>
-                )}
-              </div>
-
-              {/* Bot Enabled Toggle */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
-                <div>
-                  <span className="font-extrabold text-xs text-slate-900 block">Ativar Assistente Virtual IA</span>
-                  <span className="text-[10.5px] text-slate-500 font-medium">Disponibiliza o botão e modal 24/7 para todos os clientes</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSaveBotSettings({ ...adminBotSettings, enabled: !adminBotSettings.enabled })}
-                  className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.enabled ? 'text-emerald-600' : 'text-slate-400'}`}
-                >
-                  {adminBotSettings.enabled ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
-                </button>
-              </div>
-
-              {/* Auto Reply in Shared Chat Toggle */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
-                <div>
-                  <span className="font-extrabold text-xs text-slate-900 block">Respostas no Chat Geral</span>
-                  <span className="text-[10.5px] text-slate-500 font-medium">O bot responde instantaneamente no chat geral de encomendas</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSaveBotSettings({ ...adminBotSettings, autoReplyInSharedChat: !adminBotSettings.autoReplyInSharedChat })}
-                  className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.autoReplyInSharedChat ? 'text-emerald-600' : 'text-slate-400'}`}
-                >
-                  {adminBotSettings.autoReplyInSharedChat ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
-                </button>
-              </div>
-
-              {/* Form Fields */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Nome do Assistente Virtual
-                  </label>
-                  <input
-                    type="text"
-                    value={adminBotSettings.botName}
-                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, botName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                  />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Início Expediente Humano
+                      Balcão de Retirada Oficial em Cabinda
                     </label>
                     <input
-                      type="time"
-                      value={adminBotSettings.businessHoursStart}
-                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursStart: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      type="text"
+                      value={localLogistics.pickupLocationCabinda || localLogistics.pickupAddressCabinda || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        pickupLocationCabinda: e.target.value,
+                        pickupAddressCabinda: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
                     />
                   </div>
+
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Fim Expediente Humano
+                      Armazém de Consolidação em Luanda
                     </label>
                     <input
-                      type="time"
-                      value={adminBotSettings.businessHoursEnd}
-                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursEnd: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      type="text"
+                      value={localLogistics.consolidationWarehouseLuanda || localLogistics.consolidationAddressLuanda || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        consolidationWarehouseLuanda: e.target.value,
+                        consolidationAddressLuanda: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Comissão de Intermediação Oficial
+                    </label>
+                    <input
+                      type="text"
+                      value={localLogistics.intermediationFeePercentage || localLogistics.intermediationFeeRate || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        intermediationFeePercentage: e.target.value,
+                        intermediationFeeRate: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Taxa de Guia de Trânsito AGT Oficial
+                    </label>
+                    <input
+                      type="text"
+                      value={localLogistics.customsTransitFeeAGT || localLogistics.customsTaxAGT || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        customsTransitFeeAGT: e.target.value,
+                        customsTaxAGT: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Garantia Operacional & Reembolso Total
+                    </label>
+                    <input
+                      type="text"
+                      value={localLogistics.guaranteeAndRefundPolicy || localLogistics.warrantyAndRefundPolicy || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        guaranteeAndRefundPolicy: e.target.value,
+                        warrantyAndRefundPolicy: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Observação Operacional de Prazos (Injetada no Atendente IA)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={localLogistics.operationalNotice || localLogistics.operationalNote || ''}
+                      onChange={(e) => setLocalLogistics({
+                        ...localLogistics,
+                        operationalNotice: e.target.value,
+                        operationalNote: e.target.value
+                      })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Número WhatsApp para Escalamento Humano
-                  </label>
-                  <input
-                    type="text"
-                    value={adminBotSettings.whatsAppNumber}
-                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, whatsAppNumber: e.target.value })}
-                    placeholder="+244942043293"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
-                  />
+                {/* Audit Attribution Fields */}
+                <div className="pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Responsável pela Modificação
+                    </label>
+                    <input
+                      type="text"
+                      value={adminAuthorName}
+                      onChange={(e) => setAdminAuthorName(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Motivo / Justificativa da Alteração (Audit Log)
+                    </label>
+                    <input
+                      type="text"
+                      value={logisticsNotes}
+                      onChange={(e) => setLogisticsNotes(e.target.value)}
+                      placeholder="Ex: Ajuste no cronograma de navios de cabotagem para esta semana"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Mensagem Padrão de Boas-Vindas
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={adminBotSettings.welcomeMessage}
-                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, welcomeMessage: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Mensagem Fora de Horário / Período Noturno
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={adminBotSettings.offHoursMessage}
-                    onChange={(e) => setAdminBotSettings({ ...adminBotSettings, offHoursMessage: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
-                  />
-                </div>
-
+                {/* Save Button */}
                 <div className="pt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      handleSaveBotSettings(adminBotSettings);
-                      speak("Configurações do Assistente Virtual IA gravadas com sucesso.");
-                    }}
-                    className="w-full py-3 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    onClick={handleSaveLogisticsConfig}
+                    className="w-full py-3.5 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 font-extrabold text-sm rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>Guardar Alterações do Bot</span>
+                    <CheckCircle2 className="w-5 h-5 text-amber-400" />
+                    <span>Salvar Configurações de Logística & Sincronizar IA</span>
                   </button>
                 </div>
               </div>
+
             </div>
+          )}
 
-            {/* Right Column: Knowledge Base & Live Simulation */}
-            <div className="lg:col-span-6 space-y-6">
+          {/* SUB-TAB 2: BASE DE CONHECIMENTO DINÂMICA (FAQ & Documentação) */}
+          {botSubTab === 'knowledge' && (
+            <div className="space-y-6 animate-fade-in">
               
-              {/* Knowledge Base Explorer */}
-              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-150 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              {/* Top Controls */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <HelpCircle className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-display">
-                      Base de Conhecimento Oficial ({KNOWLEDGE_BASE_ITEMS.length} tópicos)
-                    </h3>
+                    <BookOpen className="w-5 h-5 text-amber-500" />
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 font-display">
+                        Base de Conhecimento Dinâmica do Mediador Cabinda
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Adicione, edite ou pause perguntas e respostas que alimentam o motor de inteligência artificial
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">Cabinda & Luanda</span>
-                </div>
 
-                {/* Search in Knowledge Base */}
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    value={botKnowledgeSearch}
-                    onChange={(e) => setBotKnowledgeSearch(e.target.value)}
-                    placeholder="Filtrar base de conhecimento (ex: prazos, taxas, IBAN, portos)..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
-                  />
-                </div>
-
-                {/* Knowledge Base Items List */}
-                <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                  {KNOWLEDGE_BASE_ITEMS
-                    .filter(item => 
-                      !botKnowledgeSearch.trim() || 
-                      item.question.toLowerCase().includes(botKnowledgeSearch.toLowerCase()) ||
-                      item.keywords.some(k => k.toLowerCase().includes(botKnowledgeSearch.toLowerCase()))
-                    )
-                    .map((item) => (
-                      <details key={item.id} className="group bg-slate-50 hover:bg-slate-100/70 border border-slate-150 rounded-2xl p-3.5 transition-colors">
-                        <summary className="font-extrabold text-xs text-slate-900 flex items-center justify-between cursor-pointer list-none">
-                          <div className="flex items-center gap-2 pr-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-                            <span>{item.question}</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 group-open:rotate-180 transition-transform">▼</span>
-                        </summary>
-                        <div className="mt-3 pt-2.5 border-t border-slate-200 text-xs text-slate-700 space-y-2 whitespace-pre-wrap leading-relaxed">
-                          <p>{item.detailedAnswer}</p>
-                          {item.suggestedNextQuestions.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-2">
-                              <span className="text-[9px] font-bold text-slate-400 uppercase w-full">Perguntas Sugeridas:</span>
-                              {item.suggestedNextQuestions.map((q, qIdx) => (
-                                <span key={qIdx} className="text-[9.5px] bg-white border border-slate-200 px-2 py-0.5 rounded-lg text-slate-600 font-medium">
-                                  {q}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </details>
-                    ))}
-                </div>
-              </div>
-
-              {/* Real-time Simulator for Admin Testing */}
-              <div className="bg-gradient-to-br from-slate-900 to-slate-950 p-5 rounded-3xl border border-slate-800 text-white space-y-3.5 shadow-lg">
-                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-300 font-display">
-                      Simulador de Dúvida em Tempo Real
-                    </span>
-                  </div>
-                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full">
-                    Teste Instantâneo
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300">
-                  Teste o motor do bot para verificar a resposta imediata que será enviada aos clientes:
-                </p>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {POPULAR_QUESTIONS.slice(0, 4).map((q, idx) => (
                     <button
-                      key={idx}
                       type="button"
                       onClick={() => {
-                        const res = solveBotQueryLocally(q);
-                        alert(`🤖 [RESPOSTA DO MANO MEDIADOR IA]:\n\n${res.text}`);
+                        setEditingKnowledgeItem(null);
+                        setKnowledgeForm({
+                          category: 'Logística',
+                          question: '',
+                          shortAnswer: '',
+                          detailedAnswer: '',
+                          keywords: [],
+                          suggestedNextQuestions: [],
+                          isActive: true
+                        });
+                        setKeywordsInput('');
+                        setNextQuestionsInput('');
+                        setIsCreatingKnowledgeItem(true);
                       }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-200 text-[10px] font-bold rounded-lg border border-slate-700 cursor-pointer transition-all"
+                      className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                     >
-                      {q}
+                      <PlusCircle className="w-4 h-4" />
+                      <span>Novo Tópico de Conhecimento</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Deseja restaurar a base de conhecimento oficial padrão do Mediador Cabinda?')) {
+                          if (onResetKnowledgeBaseToDefaults) {
+                            onResetKnowledgeBaseToDefaults();
+                          } else {
+                            localStorage.setItem('mediador_cabinda_knowledge_base', JSON.stringify(INITIAL_DYNAMIC_KNOWLEDGE_BASE));
+                          }
+                          speak("Base de conhecimento padrão restaurada.");
+                          setKnowledgeFeedback("Base de conhecimento oficial restaurada com sucesso!");
+                        }
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      title="Restaurar valores padrão oficiais"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search & Category Filter */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-2">
+                  <div className="sm:col-span-8 relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      value={botKnowledgeSearch}
+                      onChange={(e) => setBotKnowledgeSearch(e.target.value)}
+                      placeholder="Pesquisar por pergunta, resposta ou palavras-chave (ex: prazos, AGT, IBAN, devoluções)..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4">
+                    <select
+                      value={selectedKnowledgeCategory}
+                      onChange={(e) => setSelectedKnowledgeCategory(e.target.value)}
+                      className="w-full py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden"
+                    >
+                      <option value="TODAS">📂 Todas as Categorias ({activeKnowledge.length})</option>
+                      <option value="Logística">🚚 Logística</option>
+                      <option value="Prazos">⏱️ Prazos de Entrega</option>
+                      <option value="Custos">💰 Custos & Taxas</option>
+                      <option value="Documentação">📄 Documentação & AGT</option>
+                      <option value="Rastreamento">📦 Rastreamento</option>
+                      <option value="Pagamentos">💳 Pagamentos & IBAN</option>
+                      <option value="Garantia">🛡️ Garantia & Reembolso</option>
+                      <option value="Categorias">🏷️ Categorias de Produtos</option>
+                      <option value="Regras">⚖️ Regras & Segurança</option>
+                      <option value="Geral">🏢 Geral & Institucional</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal / Panel for Creating / Editing Knowledge Item */}
+              {(isCreatingKnowledgeItem || editingKnowledgeItem) && (
+                <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-2xl space-y-4 animate-scale-up">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Edit3 className="w-5 h-5 text-amber-400" />
+                      <h4 className="font-black text-sm text-white font-display">
+                        {editingKnowledgeItem ? 'Editar Tópico de Conhecimento IA' : 'Adicionar Novo Tópico à IA'}
+                      </h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingKnowledgeItem(false);
+                        setEditingKnowledgeItem(null);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-900">
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                        Pergunta Oficial do Cliente
+                      </label>
+                      <input
+                        type="text"
+                        value={knowledgeForm.question || ''}
+                        onChange={(e) => setKnowledgeForm({ ...knowledgeForm, question: e.target.value })}
+                        placeholder="Ex: Quais são os prazos de entrega marítimos e aéreos para Cabinda?"
+                        className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:bg-slate-850 focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                        Categoria Temática
+                      </label>
+                      <select
+                        value={knowledgeForm.category || 'Logística'}
+                        onChange={(e) => setKnowledgeForm({ ...knowledgeForm, category: e.target.value as any })}
+                        className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-hidden"
+                      >
+                        <option value="Logística">🚚 Logística</option>
+                        <option value="Prazos">⏱️ Prazos</option>
+                        <option value="Custos">💰 Custos & Taxas</option>
+                        <option value="Documentação">📄 Documentação</option>
+                        <option value="Rastreamento">📦 Rastreamento</option>
+                        <option value="Pagamentos">💳 Pagamentos</option>
+                        <option value="Garantia">🛡️ Garantia</option>
+                        <option value="Categorias">🏷️ Categorias</option>
+                        <option value="Regras">⚖️ Regras</option>
+                        <option value="Geral">🏢 Geral</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                        Palavras-chave para Busca (Separadas por vírgula)
+                      </label>
+                      <input
+                        type="text"
+                        value={keywordsInput}
+                        onChange={(e) => setKeywordsInput(e.target.value)}
+                        placeholder="Ex: prazo, quanto tempo, entrega, marítimo, dias"
+                        className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                        Resposta Detalhada Oficial da IA (Exaustiva e Transparente)
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={knowledgeForm.detailedAnswer || ''}
+                        onChange={(e) => setKnowledgeForm({ ...knowledgeForm, detailedAnswer: e.target.value })}
+                        placeholder="Escreva a resposta completa oficial do Mediador Cabinda que a IA deverá fornecer..."
+                        className="w-full p-3 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-hidden leading-relaxed font-sans"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                        Perguntas de Seguimento Sugeridas (Separadas por ponto e vírgula ;)
+                      </label>
+                      <input
+                        type="text"
+                        value={nextQuestionsInput}
+                        onChange={(e) => setNextQuestionsInput(e.target.value)}
+                        placeholder="Ex: Como fazer um novo pedido?; Quais são as formas de pagamento?; Onde retirar em Cabinda?"
+                        className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingKnowledgeItem(false);
+                        setEditingKnowledgeItem(null);
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveKnowledgeItem}
+                      className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer"
+                    >
+                      {editingKnowledgeItem ? 'Guardar Alterações do Tópico' : 'Adicionar à Base da IA'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Knowledge Base Items Grid */}
+              <div className="space-y-3">
+                {activeKnowledge
+                  .filter(item => {
+                    const matchCategory = selectedKnowledgeCategory === 'TODAS' || item.category === selectedKnowledgeCategory;
+                    const search = botKnowledgeSearch.toLowerCase().trim();
+                    const matchSearch = !search || 
+                      item.question.toLowerCase().includes(search) || 
+                      item.detailedAnswer.toLowerCase().includes(search) ||
+                      item.keywords.some(k => k.toLowerCase().includes(search));
+                    return matchCategory && matchSearch;
+                  })
+                  .map((item) => (
+                    <div key={item.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 transition-all hover:border-amber-300">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] bg-slate-100 text-slate-700 font-black px-2 py-0.5 rounded-md uppercase">
+                              {item.category}
+                            </span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                              item.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {item.isActive ? 'Ativo na IA' : 'Pausado'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              Atualizado por: {item.updatedBy || 'Administrador'}
+                            </span>
+                          </div>
+                          <h4 className="font-extrabold text-sm text-slate-900">
+                            {item.question}
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingKnowledgeItem(item);
+                              setKnowledgeForm({
+                                category: item.category,
+                                question: item.question,
+                                shortAnswer: item.shortAnswer,
+                                detailedAnswer: item.detailedAnswer,
+                                keywords: item.keywords,
+                                suggestedNextQuestions: item.suggestedNextQuestions,
+                                isActive: item.isActive
+                              });
+                              setKeywordsInput(item.keywords.join(', '));
+                              setNextQuestionsInput(item.suggestedNextQuestions.join('; '));
+                              setIsCreatingKnowledgeItem(false);
+                            }}
+                            className="p-2 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                            title="Editar Tópico"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = { ...item, isActive: !item.isActive, lastUpdated: new Date().toISOString(), updatedBy: adminAuthorName };
+                              if (onUpdateKnowledgeItem) onUpdateKnowledgeItem(updated);
+                            }}
+                            className={`p-2 rounded-lg cursor-pointer transition-colors ${
+                              item.isActive ? 'text-emerald-600 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'
+                            }`}
+                            title={item.isActive ? 'Desativar este tópico' : 'Ativar este tópico'}
+                          >
+                            {item.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Deseja mesmo remover o tópico "${item.question}" da base de conhecimento da IA?`)) {
+                                if (onDeleteKnowledgeItem) onDeleteKnowledgeItem(item.id);
+                              }
+                            }}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                            title="Eliminar Tópico"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Detailed Answer */}
+                      <div className="bg-slate-50 p-3.5 rounded-xl text-xs text-slate-700 space-y-2 whitespace-pre-wrap leading-relaxed border border-slate-150 font-sans">
+                        <p>{item.detailedAnswer}</p>
+                      </div>
+
+                      {/* Keywords & Next Questions */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[10px] text-slate-500">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="font-bold text-slate-400 uppercase">Tags:</span>
+                          {item.keywords.map((kw, kwIdx) => (
+                            <span key={kwIdx} className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600 font-medium">
+                              #{kw}
+                            </span>
+                          ))}
+                        </div>
+
+                        {item.suggestedNextQuestions && item.suggestedNextQuestions.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="font-bold text-slate-400 uppercase">Perguntas Rápidas:</span>
+                            {item.suggestedNextQuestions.slice(0, 2).map((q, qIdx) => (
+                              <span key={qIdx} className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                                {q}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ))}
+              </div>
+
+            </div>
+          )}
+
+          {/* SUB-TAB 3: HISTÓRICO DE AUDITORIA (Audit Logs) */}
+          {botSubTab === 'audit' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 font-display">
+                        Registo de Auditoria & Modificações da IA
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Rastreabilidade completa de todas as alterações feitas em prazos, regras e base de dados
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-xl">
+                    {activeAuditLogs.length} Registos
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-black tracking-wider bg-slate-50/50">
+                        <th className="p-3">Data e Hora</th>
+                        <th className="p-3">Administrador</th>
+                        <th className="p-3">Seção / Campo</th>
+                        <th className="p-3">Valor Anterior</th>
+                        <th className="p-3">Novo Valor</th>
+                        <th className="p-3">Notas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeAuditLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                            {new Date(log.timestamp).toLocaleString('pt-PT')}
+                          </td>
+                          <td className="p-3">
+                            <span className="font-black text-slate-900 block">{log.adminName}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">{log.adminRole}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{log.section}</span>
+                            <span className="text-[10.5px] text-slate-500">{log.fieldName}</span>
+                          </td>
+                          <td className="p-3 max-w-xs truncate">
+                            <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-[11px] font-mono line-through block truncate">
+                              {log.previousValue || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="p-3 max-w-xs truncate">
+                            <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded text-[11px] font-mono font-bold block truncate">
+                              {log.newValue}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-500 italic max-w-xs">
+                            {log.notes || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 4: PARÂMETROS GERAIS & SIMULADOR EM TEMPO REAL */}
+          {botSubTab === 'settings_sim' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
+              
+              {/* Left Column: Bot Settings Form */}
+              <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-3xl border border-slate-150 shadow-sm space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                  <div className="flex items-center gap-2">
+                    <SettingsIcon className="w-5 h-5 text-amber-500" />
+                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-display">
+                      Parâmetros e Regras do Atendente
+                    </h3>
+                  </div>
+                  {botSaveFeedback && (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2.5 py-1 rounded-lg animate-pulse">
+                      ✓ Guardado com Sucesso!
+                    </span>
+                  )}
+                </div>
+
+                {/* Bot Enabled Toggle */}
+                <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                  <div>
+                    <span className="font-extrabold text-xs text-slate-900 block">Ativar Assistente Virtual IA 24/7</span>
+                    <span className="text-[10.5px] text-slate-500 font-medium">Disponibiliza o botão e modal 24/7 para todos os clientes</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveBotSettings({ ...adminBotSettings, enabled: !adminBotSettings.enabled })}
+                    className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.enabled ? 'text-emerald-600' : 'text-slate-400'}`}
+                  >
+                    {adminBotSettings.enabled ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+                  </button>
+                </div>
+
+                {/* Auto Reply in Shared Chat Toggle */}
+                <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                  <div>
+                    <span className="font-extrabold text-xs text-slate-900 block">Respostas no Chat Geral</span>
+                    <span className="text-[10.5px] text-slate-500 font-medium">O bot responde instantaneamente no chat geral de encomendas</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveBotSettings({ ...adminBotSettings, autoReplyInSharedChat: !adminBotSettings.autoReplyInSharedChat })}
+                    className={`p-1 rounded-full cursor-pointer transition-colors ${adminBotSettings.autoReplyInSharedChat ? 'text-emerald-600' : 'text-slate-400'}`}
+                  >
+                    {adminBotSettings.autoReplyInSharedChat ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+                  </button>
+                </div>
+
+                {/* Form Fields */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Nome do Assistente Virtual
+                    </label>
+                    <input
+                      type="text"
+                      value={adminBotSettings.botName}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, botName: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Início Expediente Presencial
+                      </label>
+                      <input
+                        type="time"
+                        value={adminBotSettings.businessHoursStart}
+                        onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursStart: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Fim Expediente Presencial
+                      </label>
+                      <input
+                        type="time"
+                        value={adminBotSettings.businessHoursEnd}
+                        onChange={(e) => setAdminBotSettings({ ...adminBotSettings, businessHoursEnd: e.target.value })}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Número WhatsApp para Escalamento Humano
+                    </label>
+                    <input
+                      type="text"
+                      value={adminBotSettings.whatsAppNumber}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, whatsAppNumber: e.target.value })}
+                      placeholder="+244942043293"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Mensagem Padrão de Boas-Vindas
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={adminBotSettings.welcomeMessage}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, welcomeMessage: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Mensagem Fora de Horário / Período Noturno
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={adminBotSettings.offHoursMessage}
+                      onChange={(e) => setAdminBotSettings({ ...adminBotSettings, offHoursMessage: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-hidden leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSaveBotSettings(adminBotSettings);
+                        speak("Configurações do Assistente Virtual IA gravadas com sucesso.");
+                      }}
+                      className="w-full py-3 bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Guardar Alterações do Bot</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Real-Time Interactive AI Simulator */}
+              <div className="lg:col-span-6 bg-slate-900 text-white p-5 sm:p-6 rounded-3xl border border-slate-800 shadow-xl space-y-4 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <h3 className="font-black text-sm text-white font-display">
+                          Simulador Interativo da IA em Tempo Real
+                        </h3>
+                        <p className="text-[11px] text-slate-400 font-medium">
+                          Teste as respostas com os novos prazos e tópicos configurados
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full">
+                      Live Solver
+                    </span>
+                  </div>
+
+                  {/* Simulator Quick Topics */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                      Testes Rápidos de Perguntas Frequentes:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'Quanto tempo demora o transporte de uma carga refrigerada de Luanda para Cabinda?',
+                        'Vocês fazem transporte de produtos congelados?',
+                        'Quais são os prazos de entrega marítimos e aéreos?',
+                        'Quanto tempo demora por via marítima?',
+                        'Como pagar por Multicaixa Express ou IBAN?',
+                        'Quais são as taxas de intermediação e AGT?',
+                        'Como funciona a intermediação em 6 passos?',
+                        'Onde retirar as mercadorias em Cabinda?'
+                      ].map((q, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSimQuery(q);
+                            handleExecuteSimTest(q);
+                          }}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-200 text-[10.5px] font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all text-left"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Simulator Query Input */}
+                  <div className="space-y-2 pt-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={simQuery}
+                        onChange={(e) => setSimQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleExecuteSimTest();
+                        }}
+                        placeholder="Digite qualquer pergunta de cliente para testar a IA..."
+                        className="w-full pl-3.5 pr-24 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:bg-slate-850 focus:border-amber-400 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleExecuteSimTest()}
+                        disabled={simLoading}
+                        className="absolute right-1.5 top-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] rounded-lg shadow cursor-pointer transition-all disabled:opacity-50"
+                      >
+                        {simLoading ? 'A gerar...' : 'Testar IA'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Simulator Result Card */}
+                  {simResult ? (
+                    <div className="bg-slate-850 p-4 rounded-2xl border border-slate-750 space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between border-b border-slate-750 pb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          Resposta Gerada Pela IA:
+                        </span>
+                        <span className="text-[9px] bg-slate-700 text-slate-300 font-mono px-2 py-0.5 rounded">
+                          {simResult.source}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed max-h-[220px] overflow-y-auto pr-1">
+                        {simResult.text}
+                      </div>
+
+                      {simResult.suggestedQuestions && simResult.suggestedQuestions.length > 0 && (
+                        <div className="pt-2 border-t border-slate-750 space-y-1">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase block">
+                            Perguntas Sugeridas:
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {simResult.suggestedQuestions.map((sq, sqIdx) => (
+                              <button
+                                key={sqIdx}
+                                type="button"
+                                onClick={() => {
+                                  setSimQuery(sq);
+                                  handleExecuteSimTest(sq);
+                                }}
+                                className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-lg cursor-pointer"
+                              >
+                                {sq}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-850/50 p-8 rounded-2xl border border-dashed border-slate-750 text-center text-slate-400 text-xs">
+                      <Bot className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+                      <p>Clique num dos testes rápidos ou escreva uma pergunta acima para verificar a resposta imediata da IA.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 text-[10.5px] text-slate-400 text-center">
+                  Mediador Cabinda Lda — Assistente Oficial 24/7 Desenvolvido para o Enclave de Cabinda
                 </div>
               </div>
 
             </div>
-
-          </div>
+          )}
 
         </div>
       )}
@@ -6248,6 +8239,160 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
           </div>
         );
       })()}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CHAVE MASTER DE SEGURANÇA & GESTÃO DE REINICIALIZAÇÃO TOTAL */}
+      {/* ========================================================================= */}
+      {showSecurityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in" id="master-security-modal">
+          <div className="bg-slate-900 border-2 border-red-500/50 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl text-white space-y-0">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-red-950 via-slate-900 to-red-950 p-6 border-b border-red-900/40 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/50 flex items-center justify-center text-2xl shadow-inner">
+                  🛡️
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
+                    Credenciais Master & Gestão de Dados
+                  </h3>
+                  <p className="text-xs text-red-300">
+                    Acesso exclusivo à Direção Geral • Mediador Cabinda Lda.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSecurityModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              
+              {/* Credentials Box */}
+              <div className="bg-slate-950 border border-amber-400/30 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <h4 className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                      Suas Credenciais de Administrador
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-bold bg-amber-400/10 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-md">
+                    Criptografia Ativa
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      Identificador / Utilizador:
+                    </label>
+                    <div className="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-xl border border-slate-800 font-mono text-slate-200">
+                      <span>admin <span className="text-slate-500 font-sans text-[11px]">(ou direcao@mediadorcabinda.ao)</span></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText('admin');
+                          showModalAlert('Copiado!', 'Identificador "admin" copiado.', 'success');
+                        }}
+                        className="text-[11px] text-amber-400 hover:underline cursor-pointer font-bold font-sans"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      Palavra-passe Master Ultra Segura (Longa e Inviolável):
+                    </label>
+                    <div className="bg-slate-900 p-3 rounded-xl border border-amber-400/40 space-y-2">
+                      <div className="font-mono text-amber-300 break-all select-all font-bold text-xs bg-black/40 p-2.5 rounded-lg border border-white/5">
+                        {MASTER_ADMIN_CREDENTIALS.passphrase}
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[10px] text-slate-400">
+                          {MASTER_ADMIN_CREDENTIALS.passphrase.length} caracteres • Alta Entropia & Símbolos
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(MASTER_ADMIN_CREDENTIALS.passphrase);
+                            setCopiedPassKey(true);
+                            setTimeout(() => setCopiedPassKey(false), 3000);
+                            speak("Senha mestre copiada com sucesso.");
+                          }}
+                          className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                        >
+                          {copiedPassKey ? '✅ Copiada!' : '📋 Copiar Senha Mestre'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-950/30 border border-amber-500/20 rounded-xl text-[11px] text-amber-200 leading-relaxed">
+                    💡 <strong>Como aceder:</strong> No portal de login, introduza <strong>admin</strong> no campo de identificador e cole a senha master acima no campo de palavra-passe. O sistema reconhecerá imediatamente o privilégio de Direção Geral.
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Wipe & Fresh Start Box */}
+              <div className="bg-red-950/40 border border-red-500/40 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-2 text-red-400 border-b border-red-500/20 pb-3">
+                  <AlertTriangle className="w-5 h-5" />
+                  <h4 className="text-xs font-black uppercase tracking-wider">
+                    Reiniciar Sistema & Apagar Todas as Contas Criadas
+                  </h4>
+                </div>
+
+                <p className="text-xs text-red-200 leading-relaxed">
+                  Esta ação <strong>eliminará permanentemente todas as contas de clientes antigas, encomendas de teste e registos de sessão anteriores</strong>, restaurando a aplicação para o estado 100% limpo e novo, mantendo apenas a sua conta de Administrador.
+                </p>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <span className="text-[11px] text-slate-400">
+                    Ação irreversível de higienização de dados.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("⚠️ ATENÇÃO: Tem a certeza que deseja APAGAR todas as contas e encomendas para reiniciar o sistema do zero? Esta ação é definitiva.")) {
+                        wipeAllStoredData();
+                        speak("Todos os dados de contas e encomendas foram apagados. O sistema foi reiniciado com sucesso.");
+                        alert("✅ Sucesso! Todos os dados de clientes foram eliminados. A página será recarregada.");
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-black text-xs rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>🗑️</span>
+                    <span>Apagar Tudo e Reiniciar Sistema</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-950 p-4 border-t border-slate-800 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSecurityModal(false)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer transition-all"
+              >
+                Fechar Painel
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

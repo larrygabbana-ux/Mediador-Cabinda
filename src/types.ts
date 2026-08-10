@@ -58,6 +58,10 @@ export interface Order {
   deliveryAddress?: string;
 
   // Carriage details
+  routeDirection?: 'Luanda-Cabinda' | 'Cabinda-Luanda';
+  originCity?: string;
+  destinationCity?: string;
+  transportMode?: 'maritimo' | 'aereo' | 'terrestre';
   shippingCarrier?: string;
   shippingGuideNumber?: string;
   shippingDate?: string;
@@ -102,6 +106,7 @@ export interface CarrierCompany {
   phone: string;
   baseRatePerKg: number;
   expectedDays: number;
+  mode?: 'maritimo' | 'aereo' | 'terrestre';
 }
 
 export interface Supplier {
@@ -123,20 +128,49 @@ export interface Supplier {
   createdAt: string;
 }
 
+export interface MarketplaceSubCategory {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+}
+
+export interface MarketplaceCategory {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  subCategories: MarketplaceSubCategory[];
+}
+
 export interface SupplierProduct {
   id: string;
   productCode?: string; // Product SKU / Identity code e.g. PRD-1001
   supplierId: string;
   name: string;
+  category?: string;
+  subCategory?: string;
   price: number; // in AOA
+  originalPrice?: number; // crossed out price if discount
   availability: 'imediata' | 'sob-pedido' | 'esgotado';
   stock: number;
   description?: string;
   photoUrl: string;
+  photos?: string[]; // Up to 8 photo URLs for full gallery
   published: boolean; // Approved/published by mediator
   sponsored: boolean; // Highlighted
-  location?: 'Luanda' | 'Cabinda'; // Physical warehouse location
+  location?: 'Luanda' | 'Cabinda' | 'Huíla' | 'Benguela' | 'Huambo' | string; // Physical warehouse / source location
   availableFromDate?: string; // Estimated date/info on when supplier makes it available
+  rating?: number; // e.g. 4.8
+  reviewsCount?: number; // e.g. 14 avaliações
+  salesCount?: number; // e.g. 85 vendas
+  tags?: string[]; // e.g. ['Mais Vendido', 'Super Oferta', 'Frete Reduzido']
+  condition?: 'novo' | 'recondicionado' | 'usado' | 'seminovo';
+  warranty?: string; // e.g. 'Garantia de 12 Meses'
+  brand?: string;
+  model?: string;
+  featured?: boolean;
+  specifications?: { key: string; value: string }[];
   createdAt: string;
 }
 
@@ -236,6 +270,93 @@ export interface BotSettings {
   allowWhatsAppEscalation: boolean;
   whatsAppNumber: string; // "+244942043293"
 }
+
+export interface AdminMasterAccount {
+  name: string;
+  email: string;
+  phone: string;
+  passwordHash?: string;
+  password?: string;
+  pin: string; // 6-digit numeric PIN
+  biometricEnrolled: boolean;
+  biometricCredentialId?: string;
+  biometricDeviceName?: string;
+  whatsappEnabled: boolean;
+  emailEnabled: boolean;
+  callEnabled: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface LogisticsModeConfig {
+  id: 'aereo' | 'maritimo' | 'terrestre' | string;
+  name: string; // e.g. "Via Aérea (TAAG Cargo Express)"
+  averageTime: string; // e.g. "1 dia" or "2–3 dias" or "7–8 dias ou mais"
+  costEstimate: string; // e.g. "2.500 AOA / kg"
+  description: string;
+  recommendation: string;
+  status: 'ativo' | 'condicionado' | 'pausado';
+  estimatedDays?: string;
+  costPerKg?: string;
+  recommendedFor?: string;
+}
+
+export interface GeneralLogisticsSettings {
+  modes: {
+    aereo: LogisticsModeConfig;
+    maritimo: LogisticsModeConfig;
+    terrestre: LogisticsModeConfig;
+  };
+  intermediationFeeRate: string; // "10% a 15%"
+  customsTaxAGT: string; // "8.000 AOA (Taxa fixa Guia de Trânsito AGT)"
+  pickupAddressCabinda: string; // "Armazém C-4, Recinto Portuário de Cabinda, Rua Direita"
+  consolidationAddressLuanda: string; // "Parque Logístico Portuário / Viana, Luanda"
+  deliveryOptions: string; // "Levantamento no Balcão de Cabinda (Armazém C-4) ou Entrega ao Domicílio"
+  requiredDocuments: string[];
+  warrantyAndRefundPolicy: string;
+  operationalNote: string;
+  lastUpdated: string;
+  updatedBy: string;
+  intermediationFeePercentage?: string;
+  customsTransitFeeAGT?: string;
+  pickupLocationCabinda?: string;
+  consolidationWarehouseLuanda?: string;
+  guaranteeAndRefundPolicy?: string;
+  operationalNotice?: string;
+}
+
+export interface DynamicKnowledgeItem {
+  id: string;
+  category: 'logistica' | 'prazos' | 'custos' | 'documentacao' | 'rastreamento' | 'pagamentos' | 'garantia' | 'categorias' | 'regras' | 'geral' | string;
+  question: string;
+  keywords: string[];
+  shortAnswer: string;
+  detailedAnswer: string;
+  suggestedNextQuestions: string[];
+  actionLink?: {
+    label: string;
+    view: string;
+    icon?: string;
+  };
+  isActive: boolean;
+  lastUpdated: string;
+  updatedBy?: string;
+}
+
+export interface KnowledgeAuditLog {
+  id: string;
+  timestamp: string;
+  adminName: string;
+  adminRole?: string;
+  actionType: 'logistica_update' | 'knowledge_item_create' | 'knowledge_item_update' | 'knowledge_item_delete' | 'knowledge_create' | 'knowledge_edit' | 'knowledge_delete' | 'bot_settings_update' | 'reset_defaults' | string;
+  section: string;
+  fieldName?: string;
+  previousValue: string;
+  newValue: string;
+  notes?: string;
+}
+
+export type AuditLogEntry = KnowledgeAuditLog;
 
 
 

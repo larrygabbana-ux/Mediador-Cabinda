@@ -5,7 +5,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Client, Order, Message, Notification, CarrierCompany, Supplier, SupplierProduct, SupplierMessage, Collaborator, CollaboratorSale, SupplierService, ServiceRequest, BotSettings } from './types';
+import { 
+  Client, 
+  Order, 
+  Message, 
+  Notification, 
+  CarrierCompany, 
+  Supplier, 
+  SupplierProduct, 
+  SupplierMessage, 
+  Collaborator, 
+  CollaboratorSale, 
+  SupplierService, 
+  ServiceRequest, 
+  BotSettings,
+  GeneralLogisticsSettings,
+  DynamicKnowledgeItem,
+  AuditLogEntry
+} from './types';
 import { 
   getClients, 
   getOrders, 
@@ -27,8 +44,18 @@ import {
   getSupplierServices,
   saveSupplierServices,
   getServiceRequests,
-  saveServiceRequests
+  saveServiceRequests,
+  PROVINCES_OF_ANGOLA,
+  MUNICIPALITIES,
+  MASTER_ADMIN_CREDENTIALS
 } from './data/mockData';
+import {
+  getStoredLogisticsConfig,
+  getStoredKnowledgeBase,
+  getStoredAuditLogs,
+  addAuditLogEntry,
+  INITIAL_DYNAMIC_KNOWLEDGE_BASE
+} from './utils/aiBotKnowledge';
 import ClientDashboard from './components/ClientDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import AiChatbotModal from './components/AiChatbotModal';
@@ -63,7 +90,21 @@ import {
   AlertCircle,
   MessageSquare,
   Bot,
-  Sparkles
+  Sparkles,
+  Lock,
+  Unlock,
+  Key,
+  Eye,
+  EyeOff,
+  UserPlus,
+  LogIn,
+  LogOut,
+  Phone,
+  PhoneCall,
+  Mail,
+  MapPin,
+  ShieldAlert,
+  Fingerprint
 } from 'lucide-react';
 
 export default function App() {
@@ -92,9 +133,37 @@ export default function App() {
   });
   const [authError, setAuthError] = useState<string>('');
 
+  // Track if current session is authenticated as an administrator/collaborator
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('mediador_cabinda_is_admin_logged_in') === 'true';
+    }
+    return false;
+  });
+
+  // Authentication & Account Creation Portal states (Simplified 2-tab portal: Login / Signup)
+  const [authPortalTab, setAuthPortalTab] = useState<'login' | 'signup'>('login');
+  
+  // Registration form states
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regProvince, setRegProvince] = useState('Cabinda');
+  const [regMunicipality, setRegMunicipality] = useState('Cabinda (Sede)');
+  const [regBairro, setRegBairro] = useState('');
+  const [regNif, setRegNif] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+
+  // Unified login form states (detects client or admin automatically)
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // Role and dynamic session state
   const [role, setRole] = useState<'client' | 'admin'>('client');
   const [clients, setClients] = useState<Client[]>([]);
-  const [activeClientId, setActiveClientId] = useState<string>('cli-1');
+  const [activeClientId, setActiveClientId] = useState<string>(() => getCurrentClientId());
   const [orders, setOrders] = useState<Order[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -153,6 +222,98 @@ export default function App() {
     };
   });
 
+  // Dynamic Logistics & Knowledge Base Live State (Synchronized between Admin and IA Chatbot 24/7)
+  const [logisticsConfig, setLogisticsConfig] = useState<GeneralLogisticsSettings>(() => getStoredLogisticsConfig());
+  const [knowledgeBase, setKnowledgeBase] = useState<DynamicKnowledgeItem[]>(() => getStoredKnowledgeBase());
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => getStoredAuditLogs());
+
+  const handleUpdateLogisticsConfig = (updated: GeneralLogisticsSettings, notes?: string) => {
+    setLogisticsConfig(updated);
+    localStorage.setItem('mediador_cabinda_logistics_config', JSON.stringify(updated));
+    const newLog = addAuditLogEntry({
+      adminName: updated.updatedBy || 'João Hilário António (Administrador Geral)',
+      adminRole: 'Super Administrador',
+      actionType: 'logistica_update',
+      section: 'Configurações de Logística',
+      fieldName: 'Modais de Transporte e Prazos',
+      previousValue: `Aéreo: ${logisticsConfig.modes.aereo.averageTime || logisticsConfig.modes.aereo.estimatedDays || ''}, Marítimo: ${logisticsConfig.modes.maritimo.averageTime || logisticsConfig.modes.maritimo.estimatedDays || ''}, Terrestre: ${logisticsConfig.modes.terrestre.averageTime || logisticsConfig.modes.terrestre.estimatedDays || ''}`,
+      newValue: `Aéreo: ${updated.modes.aereo.averageTime || updated.modes.aereo.estimatedDays || ''}, Marítimo: ${updated.modes.maritimo.averageTime || updated.modes.maritimo.estimatedDays || ''}, Terrestre: ${updated.modes.terrestre.averageTime || updated.modes.terrestre.estimatedDays || ''}`,
+      notes: notes || 'Atualização de modais e prazos operacionais'
+    });
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const handleUpdateKnowledgeItem = (updated: DynamicKnowledgeItem) => {
+    const previous = knowledgeBase.find(k => k.id === updated.id);
+    const newKb = knowledgeBase.map(k => k.id === updated.id ? updated : k);
+    setKnowledgeBase(newKb);
+    localStorage.setItem('mediador_cabinda_knowledge_base', JSON.stringify(newKb));
+    const newLog = addAuditLogEntry({
+      adminName: updated.updatedBy || 'Administrador Geral',
+      adminRole: 'Super Administrador',
+      actionType: 'knowledge_edit',
+      section: 'Base de Conhecimento Dinâmica',
+      fieldName: updated.question,
+      previousValue: previous?.detailedAnswer.slice(0, 80) || 'N/A',
+      newValue: updated.detailedAnswer.slice(0, 80),
+      notes: `Tópico atualizado (${updated.category})`
+    });
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const handleCreateKnowledgeItem = (newItem: DynamicKnowledgeItem) => {
+    const newKb = [newItem, ...knowledgeBase];
+    setKnowledgeBase(newKb);
+    localStorage.setItem('mediador_cabinda_knowledge_base', JSON.stringify(newKb));
+    const newLog = addAuditLogEntry({
+      adminName: newItem.updatedBy || 'Administrador Geral',
+      adminRole: 'Super Administrador',
+      actionType: 'knowledge_create',
+      section: 'Base de Conhecimento Dinâmica',
+      fieldName: newItem.question,
+      previousValue: 'Inexistente',
+      newValue: newItem.detailedAnswer.slice(0, 80),
+      notes: `Novo tópico criado (${newItem.category})`
+    });
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const handleDeleteKnowledgeItem = (id: string) => {
+    const target = knowledgeBase.find(k => k.id === id);
+    const newKb = knowledgeBase.filter(k => k.id !== id);
+    setKnowledgeBase(newKb);
+    localStorage.setItem('mediador_cabinda_knowledge_base', JSON.stringify(newKb));
+    if (target) {
+      const newLog = addAuditLogEntry({
+        adminName: 'Administrador Geral',
+        adminRole: 'Super Administrador',
+        actionType: 'knowledge_delete',
+        section: 'Base de Conhecimento Dinâmica',
+        fieldName: target.question,
+        previousValue: target.question,
+        newValue: 'Eliminado',
+        notes: `Tópico excluído da base (${target.category})`
+      });
+      setAuditLogs(prev => [newLog, ...prev]);
+    }
+  };
+
+  const handleResetKnowledgeBaseToDefaults = () => {
+    setKnowledgeBase(INITIAL_DYNAMIC_KNOWLEDGE_BASE);
+    localStorage.setItem('mediador_cabinda_knowledge_base', JSON.stringify(INITIAL_DYNAMIC_KNOWLEDGE_BASE));
+    const newLog = addAuditLogEntry({
+      adminName: 'Super Administrador',
+      adminRole: 'Super Administrador',
+      actionType: 'knowledge_edit',
+      section: 'Base de Conhecimento Dinâmica',
+      fieldName: 'Base Completa',
+      previousValue: 'Customizado',
+      newValue: 'Padrão Oficial Mediador Cabinda Restaurado',
+      notes: 'Restauração de tópicos padrão'
+    });
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
   // Search state for Home View
   const [homeSearchQuery, setHomeSearchQuery] = useState('');
 
@@ -160,23 +321,25 @@ export default function App() {
     const cleaned = code.trim().toLowerCase();
     if (!cleaned) return null;
 
-    if (cleaned === 'admin99' || cleaned === 'gestao' || cleaned === 'gestão' || cleaned === 'admin') {
+    const masterPassLower = MASTER_ADMIN_CREDENTIALS.passphrase.toLowerCase();
+    const isAdminMatch = 
+      cleaned === 'admin99' || 
+      cleaned === 'gestao' || 
+      cleaned === 'gestão' || 
+      cleaned === 'admin' ||
+      cleaned === 'administrador' ||
+      cleaned === 'direcao@mediadorcabinda.ao' ||
+      cleaned === 'gerencia@mediadorcabinda.ao' ||
+      cleaned === 'admin@mediadorcabinda.ao' ||
+      cleaned === masterPassLower;
+
+    if (isAdminMatch) {
       setRole('admin');
+      setIsAdminLoggedIn(true);
       return { role: 'admin', type: 'system' };
     }
 
-    const clientsList = getClients();
-    const matchedClient = clientsList.find(
-      c => c.id.toLowerCase() === cleaned || c.email.toLowerCase() === cleaned
-    );
-    if (matchedClient) {
-      setRole('client');
-      setActiveClientId(matchedClient.id);
-      saveCurrentClientId(matchedClient.id);
-      return { role: 'client', type: 'client', id: matchedClient.id };
-    }
-
-    // Check collaborators
+    // Check collaborators / management
     const storedColabs = localStorage.getItem('mediador_cabinda_collaborators');
     let colabsList: Collaborator[] = [];
     try {
@@ -189,37 +352,219 @@ export default function App() {
     );
     if (matchedColab) {
       setRole('admin');
+      setIsAdminLoggedIn(true);
       return { role: 'admin', type: 'collaborator', id: matchedColab.id };
+    }
+
+    const clientsList = getClients();
+    const matchedClient = clientsList.find(
+      c => c.id.toLowerCase() === cleaned || 
+           c.email.toLowerCase() === cleaned ||
+           c.phone.replace(/\D/g, '') === cleaned.replace(/\D/g, '') ||
+           c.phone.toLowerCase().includes(cleaned)
+    );
+    if (matchedClient) {
+      setRole('client');
+      setIsAdminLoggedIn(false);
+      setActiveClientId(matchedClient.id);
+      saveCurrentClientId(matchedClient.id);
+      return { role: 'client', type: 'client', id: matchedClient.id };
     }
 
     return null;
   };
 
-  const handleLogin = () => {
-    const cleaned = accessCode.trim().toLowerCase();
-    if (!cleaned) {
-      setAuthError('Por favor, introduza um código ou e-mail de acesso.');
-      speakText('Por favor, introduza um código ou e-mail de acesso.');
+  // Handler to register a brand new user account directly on the opening screen
+  const handleRegisterClient = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!regName.trim()) {
+      setAuthError('Por favor, informe o seu Nome Completo.');
+      speakText('Por favor, informe o seu Nome Completo.');
+      return;
+    }
+    if (!regPhone.trim()) {
+      setAuthError('Por favor, informe o seu Telemóvel ou WhatsApp (Unitel/Movicel).');
+      speakText('Por favor, informe o seu número de telemóvel ou WhatsApp.');
       return;
     }
 
-    const matched = authenticateCode(cleaned);
-    if (matched) {
+    const newId = `cli-${Date.now()}`;
+    const generatedEmail = regEmail.trim() || `${regPhone.replace(/\D/g, '') || 'cliente'}@mediadorcabinda.ao`;
+    const fullAddress = regBairro.trim() 
+      ? `${regBairro.trim()}, ${regMunicipality}, ${regProvince}`
+      : `${regMunicipality}, ${regProvince}`;
+
+    const newClient: Client = {
+      id: newId,
+      name: regName.trim(),
+      phone: regPhone.trim(),
+      email: generatedEmail,
+      address: fullAddress,
+      nif: regNif.trim() || `00${Math.floor(10000000 + Math.random() * 90000000)}CA01`,
+      province: regProvince,
+      municipality: regMunicipality,
+      points: 100, // Welcome points
+      tier: 'Standard'
+    };
+
+    const currentList = getClients();
+    const updatedList = [...currentList, newClient];
+    setClients(updatedList);
+    saveClients(updatedList);
+    setActiveClientId(newId);
+    saveCurrentClientId(newId);
+    setIsAdminLoggedIn(false);
+    setRole('client');
+    setIsAuthorized(true);
+    setAuthError('');
+
+    if (rememberCode) {
+      safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
+      safeLocalStorageSetItem('mediador_cabinda_saved_access_code', newClient.email);
+      safeLocalStorageSetItem('mediador_cabinda_is_admin_logged_in', 'false');
+      safeLocalStorageSetItem('mediador_cabinda_remember_code', 'true');
+    }
+
+    // Add welcome notification
+    const welcomeNotif: Notification = {
+      id: `notif-welcome-${Date.now()}`,
+      clientId: newId,
+      orderId: 'Geral',
+      title: '🎉 Bem-vindo ao Mediador Cabinda!',
+      message: `Olá, ${newClient.name}! A sua conta foi criada com sucesso. Já pode solicitar orçamentos, encomendar produtos em Luanda e receber com total segurança em Cabinda.`,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    const updatedNotifs = [welcomeNotif, ...notifications];
+    setNotifications(updatedNotifs);
+    safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
+
+    // Clear registration inputs
+    setRegName('');
+    setRegPhone('');
+    setRegEmail('');
+    setRegPassword('');
+    setRegBairro('');
+    setRegNif('');
+
+    speakText(`Conta criada com sucesso! Seja bem-vindo, ${newClient.name}.`);
+  };
+
+  // Unified Login Handler: automatically detects Client or Administrator credentials
+  const handleClientLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleaned = loginIdentifier.trim().toLowerCase();
+    if (!cleaned) {
+      setAuthError('Por favor, introduza o seu e-mail, número de telemóvel ou código de acesso.');
+      speakText('Por favor, introduza o seu e-mail, telemóvel ou código.');
+      return;
+    }
+
+    // 1. Check for Master Administrator access
+    const masterPassClean = MASTER_ADMIN_CREDENTIALS.passphrase.trim();
+    const isMasterPasswordEntered = loginPassword && (loginPassword.trim() === masterPassClean || loginPassword.trim() === 'admin99');
+    const isMasterIdentifier = 
+      cleaned === 'admin99' || 
+      cleaned === 'gestao' || 
+      cleaned === 'gestão' || 
+      cleaned === 'admin' ||
+      cleaned === 'administrador' ||
+      cleaned === 'direcao@mediadorcabinda.ao' ||
+      cleaned === 'gerencia@mediadorcabinda.ao' ||
+      cleaned === 'admin@mediadorcabinda.ao' ||
+      cleaned === masterPassClean.toLowerCase();
+
+    if (isMasterIdentifier || isMasterPasswordEntered) {
+      setRole('admin');
+      setIsAdminLoggedIn(true);
       setIsAuthorized(true);
       setAuthError('');
       if (rememberCode) {
         safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
-        safeLocalStorageSetItem('mediador_cabinda_saved_access_code', cleaned);
+        safeLocalStorageSetItem('mediador_cabinda_saved_access_code', MASTER_ADMIN_CREDENTIALS.passphrase);
+        safeLocalStorageSetItem('mediador_cabinda_is_admin_logged_in', 'true');
         safeLocalStorageSetItem('mediador_cabinda_remember_code', 'true');
-      } else {
-        localStorage.removeItem('mediador_cabinda_is_authorized');
-        localStorage.removeItem('mediador_cabinda_saved_access_code');
-        localStorage.removeItem('mediador_cabinda_remember_code');
       }
-      speakText('Acesso autorizado com sucesso. Bem-vindo de volta.');
+      speakText('Acesso de Administração autorizado com sucesso. Bem-vindo ao Painel de Gestão.');
+      return;
+    }
+
+    // 2. Check for registered Collaborator / Staff access
+    const storedColabs = localStorage.getItem('mediador_cabinda_collaborators');
+    let colabsList: Collaborator[] = [];
+    try {
+      colabsList = storedColabs ? JSON.parse(storedColabs) : [];
+    } catch {}
+    const matchedColab = colabsList.find(
+      c => c.id.toLowerCase() === cleaned || c.email.toLowerCase() === cleaned
+    );
+    if (matchedColab) {
+      setRole('admin');
+      setIsAdminLoggedIn(true);
+      setIsAuthorized(true);
+      setAuthError('');
+      if (rememberCode) {
+        safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
+        safeLocalStorageSetItem('mediador_cabinda_saved_access_code', matchedColab.id);
+        safeLocalStorageSetItem('mediador_cabinda_is_admin_logged_in', 'true');
+        safeLocalStorageSetItem('mediador_cabinda_remember_code', 'true');
+      }
+      speakText(`Acesso concedido para ${matchedColab.name}.`);
+      return;
+    }
+
+    // 3. Check for registered Client account
+    const clientsList = getClients();
+    const matchedClient = clientsList.find(
+      c => c.id.toLowerCase() === cleaned || 
+           c.email.toLowerCase() === cleaned || 
+           c.phone.replace(/\D/g, '') === cleaned.replace(/\D/g, '') ||
+           c.phone.toLowerCase().includes(cleaned) ||
+           c.name.toLowerCase().includes(cleaned)
+    );
+
+    if (matchedClient) {
+      setRole('client');
+      setIsAdminLoggedIn(false);
+      setActiveClientId(matchedClient.id);
+      saveCurrentClientId(matchedClient.id);
+      setIsAuthorized(true);
+      setAuthError('');
+      if (rememberCode) {
+        safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
+        safeLocalStorageSetItem('mediador_cabinda_saved_access_code', matchedClient.email);
+        safeLocalStorageSetItem('mediador_cabinda_is_admin_logged_in', 'false');
+        safeLocalStorageSetItem('mediador_cabinda_remember_code', 'true');
+      }
+      speakText(`Sessão iniciada com sucesso. Bem-vindo de volta, ${matchedClient.name}.`);
+      return;
+    }
+
+    setAuthError('Conta não encontrada. Verifique os dados ou crie uma conta na opção "Criar Conta".');
+    speakText('Conta não encontrada. Verifique os dados ou crie uma nova conta.');
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setIsAuthorized(false);
+    setRole('client');
+    setIsAdminLoggedIn(false);
+    localStorage.removeItem('mediador_cabinda_is_authorized');
+    localStorage.removeItem('mediador_cabinda_saved_access_code');
+    localStorage.removeItem('mediador_cabinda_is_admin_logged_in');
+    localStorage.removeItem('mediador_cabinda_remember_code');
+    setSidebarOpen(false);
+    setShowNotificationsMenu(false);
+    setAuthError('');
+    setAuthPortalTab('login');
+    speakText('Sessão terminada. Retornou ao portal de entrada.');
+  };
+
+  const handleLogin = () => {
+    if (authPortalTab === 'signup') {
+      handleRegisterClient();
     } else {
-      setAuthError('Credencial inválida. Introduza um e-mail ou código de teste válido.');
-      speakText('Credencial inválida. Introduza um e-mail ou código de teste.');
+      handleClientLogin();
     }
   };
 
@@ -273,37 +618,20 @@ export default function App() {
     setServiceRequests(getServiceRequests());
     setSupplierMessages(getSupplierMessages());
 
-    // Initialize mock notifications
+    // Initialize notifications
     const storedNotifs = localStorage.getItem('mediador_cabinda_notifications');
     if (storedNotifs) {
       try {
-        setNotifications(JSON.parse(storedNotifs));
+        const parsed: Notification[] = JSON.parse(storedNotifs);
+        const sanitized = parsed.filter(n => n.clientId !== 'cli-1' && n.clientId !== 'cli-2');
+        setNotifications(sanitized);
       } catch (e) {
         console.error("Error parsing notifications:", e);
+        setNotifications([]);
       }
     } else {
-      const initialNotifs: Notification[] = [
-        {
-          id: 'not-1',
-          clientId: 'cli-1',
-          orderId: 'MED-1001',
-          title: 'Pedido Registado',
-          message: 'A sua eletrobomba Pedrollo foi registada e seguiu para análise comercial.',
-          read: true,
-          createdAt: '2026-06-10T14:35:00Z'
-        },
-        {
-          id: 'not-2',
-          clientId: 'cli-2',
-          orderId: 'MED-1002',
-          title: 'Orçamento Pronto',
-          message: 'O orçamento do computador HP está disponível para aprovação de pagamento.',
-          read: false,
-          createdAt: '2026-06-12T10:10:00Z'
-        }
-      ];
-      setNotifications(initialNotifs);
-      safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(initialNotifs));
+      setNotifications([]);
+      safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify([]));
     }
 
     // Initialize list of carrier companies (empresas de despacho)
@@ -773,7 +1101,7 @@ export default function App() {
     }
   };
 
-  if (appLoading || clients.length === 0) {
+  if (appLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white font-sans p-4 select-none relative overflow-hidden" id="app-splash-loader-screen">
         {/* Ambient background glows */}
@@ -855,6 +1183,39 @@ export default function App() {
       ${fontSize === 'grande' ? 'font-size-grande' : fontSize === 'extra-grande' ? 'font-size-extra-grande' : ''} 
       ${highContrast ? 'high-contrast-active' : ''}`} id="app-root">
       
+      {/* ADMIN PREVIEW MODE STICKY TOP BANNER */}
+      {isAdminLoggedIn && role === 'client' && isAuthorized && (
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 text-white px-4 py-2 text-xs font-bold flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-400 sticky top-0 z-60 shadow-lg" id="admin-preview-top-banner">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping shrink-0"></span>
+            <span className="text-amber-400 font-extrabold uppercase tracking-wider text-[11px]">
+              Modo de Pré-visualização do Administrador
+            </span>
+            <span className="text-slate-300 hidden md:inline text-[11px] font-medium">
+              • Você está a visualizar a Área do Cliente para testes operacionais.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setRole('admin');
+                speakText("Retornando ao Painel de Gestão");
+              }}
+              className="px-3 py-1 bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>➔ Voltar ao Painel de Gestão</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1 bg-red-600/25 hover:bg-red-600/40 text-red-300 border border-red-500/30 rounded-xl text-[11px] font-bold transition-all cursor-pointer"
+            >
+              Sair
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* PERSISTENT CONSOLIDATED 2-LEVEL HEADER */}
       <header className="bg-slate-950 text-white sticky top-0 z-50 shadow-md border-b border-white/5" id="app-main-header">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-row items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
@@ -974,6 +1335,14 @@ export default function App() {
                     </div>
                   </div>
                 )}
+                {/* Botão Sair / Trocar Conta */}
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/20"
+                  title="Terminar Sessão / Trocar Conta"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             </>
           )}
@@ -993,17 +1362,11 @@ export default function App() {
                   <span>Ver Cliente</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setIsAuthorized(false);
-                    localStorage.removeItem('mediador_cabinda_is_authorized');
-                    localStorage.removeItem('mediador_cabinda_saved_access_code');
-                    localStorage.removeItem('mediador_cabinda_remember_code');
-                    speakText("Terminou sessão da gestão.");
-                  }}
+                  onClick={handleLogout}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-650/15 hover:bg-red-650/25 active:scale-95 text-red-400 font-bold text-[10px] rounded-xl transition-all cursor-pointer border border-red-500/15"
                   title="Terminar Sessão Completa"
                 >
-                  <X className="w-3 h-3" />
+                  <LogOut className="w-3 h-3" />
                   <span>Sair</span>
                 </button>
               </div>
@@ -1501,81 +1864,80 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ÁREA DE TESTE & PROGRAMADOR (PARA HOMOLOGAÇÃO DO APK) */}
-              <div className="border border-red-200 rounded-2xl bg-red-50/40 overflow-hidden">
-                <div className="bg-red-50 px-4 py-2 text-[10px] font-black text-red-800 tracking-wider flex items-center gap-1">
-                  <span>🛠️</span> ADMINISTRAÇÃO & TESTES
+              {/* CONTA DO UTILIZADOR & SESSÃO */}
+              <div className="border border-slate-200 rounded-2xl bg-slate-50/80 overflow-hidden shadow-xs">
+                <div className="bg-slate-100 px-4 py-2 text-[10px] font-black text-slate-700 tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-amber-500" /> CONTA & SESSÃO</span>
+                  <span className="text-[9px] text-slate-500 font-bold">{clients.find(c => c.id === activeClientId)?.tier || 'Cliente'}</span>
                 </div>
-                <div className="p-3 space-y-3 bg-white">
-                  
-                  {/* Alternador de Vista (Role Toggle) */}
-                  <div className="space-y-1">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Mudar Vista do Aplicativo</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        onClick={() => {
-                          setRole('client');
-                          speakText("Vista do cliente ativada.");
-                          setSidebarOpen(false);
-                        }}
-                        className={`px-2 py-1.5 rounded-xl text-[10px] font-bold transition-all text-center cursor-pointer ${
-                          role === 'client'
-                            ? 'bg-amber-400 text-slate-950 shadow-xs border border-amber-500 font-black'
-                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100 font-semibold'
-                        }`}
-                      >
-                        Vista Cliente
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRole('admin');
-                          speakText("Painel de gestão administrativa ativado.");
-                          setSidebarOpen(false);
-                        }}
-                        className={`px-2 py-1.5 rounded-xl text-[10px] font-bold transition-all text-center cursor-pointer ${
-                          role === 'admin'
-                            ? 'bg-amber-400 text-slate-950 shadow-xs border border-amber-500 font-black'
-                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100 font-semibold'
-                        }`}
-                      >
-                        Painel Gestão
-                      </button>
+                <div className="p-3 space-y-2.5 bg-white">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-slate-900 text-amber-400 font-extrabold text-xs flex items-center justify-center shrink-0 border border-slate-700">
+                      {clients.find(c => c.id === activeClientId)?.name.substring(0, 2).toUpperCase() || 'MC'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black text-slate-900 truncate">
+                        {clients.find(c => c.id === activeClientId)?.name || 'Cliente'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
+                        <MapPin className="w-2.5 h-2.5 text-slate-400" />
+                        {clients.find(c => c.id === activeClientId)?.province || 'Cabinda'}, Angola
+                      </p>
                     </div>
                   </div>
 
-                  {/* Reiniciar Simulador */}
-                  <div className="space-y-1 pt-1.5 border-t border-slate-100">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex justify-between">
-                      <span>Memória Local</span>
-                      <span className="text-red-500">Limpeza total</span>
-                    </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
                     <button
                       onClick={() => {
-                        handleResetSimulator();
-                        setSidebarOpen(false);
+                        handleLogout();
+                        setAuthPortalTab('signup');
+                        speakText("Criar nova conta");
                       }}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600/10 hover:bg-red-600/15 text-red-600 rounded-xl text-[10px] font-bold transition-all border border-red-200 cursor-pointer"
+                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-200 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reiniciar Simulador (Seta)</span>
+                      <UserPlus className="w-3 h-3" />
+                      <span>Nova Conta</span>
                     </button>
-                  </div>
-
-                  {/* Termos e Alertas */}
-                  <div className="pt-1.5 border-t border-slate-100">
                     <button
                       onClick={() => {
-                        setShowTermsModal(true);
-                        setSidebarOpen(false);
-                        speakText("Abrindo informações aduaneiras e termos de uso.");
+                        handleLogout();
                       }}
-                      className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-xl text-[10px] font-bold transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-650 border border-red-200 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <span>⚠️ Ver Termos e Avisos</span>
+                      <LogOut className="w-3 h-3" />
+                      <span>Sair / Login</span>
                     </button>
                   </div>
-
                 </div>
+              </div>
+
+              {/* SEÇÃO INFORMATIVA & TERMOS */}
+              <div className="border border-slate-200 rounded-2xl bg-white p-3 space-y-2.5">
+                {isAdminLoggedIn && (
+                  <button
+                    onClick={() => {
+                      setRole('admin');
+                      setSidebarOpen(false);
+                      speakText("Retornando ao Painel de Gestão.");
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-400 rounded-xl text-[11px] font-black tracking-wider transition-all border border-amber-400/40 cursor-pointer shadow-md"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>➔ Voltar ao Painel de Gestão</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setShowTermsModal(true);
+                    setSidebarOpen(false);
+                    speakText("Abrindo informações aduaneiras e termos de uso.");
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Termos de Uso e Avisos Legais</span>
+                </button>
               </div>
 
             </div>
@@ -1670,197 +2032,518 @@ export default function App() {
           <main className={`flex-1 p-0 sm:p-4 md:p-6 lg:p-8 ${simulatedDevice !== 'desktop' ? 'h-full overflow-y-auto pb-24' : ''}`}>
             
             {!isAuthorized ? (
-              <div className="max-w-md mx-auto my-4 sm:my-8 animate-fade-in" id="portal-acesso-container">
-                <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden text-left p-6 sm:p-8 space-y-6">
-                  <div className="text-center space-y-4">
-                    {/* APP LOGO DESIGN WITH SLOGAN */}
+              <div className="max-w-xl mx-auto my-4 sm:my-8 animate-fade-in" id="portal-acesso-container">
+                <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden text-left space-y-6">
+                  
+                  {/* APP LOGO DESIGN WITH BRANDING */}
+                  <div className="bg-gradient-to-b from-slate-950 to-slate-900 text-white p-6 sm:p-7 text-center relative">
                     <div className="flex flex-col items-center justify-center space-y-3" id="app-branded-logo">
-                      <div className="relative w-24 h-24 flex items-center justify-center bg-slate-50 rounded-[24px] border border-slate-150 shadow-md overflow-hidden group">
+                      <div className="relative w-20 h-20 flex items-center justify-center bg-white rounded-2xl border-2 border-amber-400/40 shadow-lg overflow-hidden p-1">
                         <img 
                           src={appLogoImg} 
                           alt="Logo Oficial Mediador Cabinda" 
-                          className="w-full h-full object-contain p-1"
+                          className="w-full h-full object-contain"
                           referrerPolicy="no-referrer"
                         />
                       </div>
                       
-                      {/* Brand display with explicit slogan requested */}
                       <div className="space-y-1 text-center">
-                        <h2 className="text-xl font-extrabold text-slate-900 tracking-tight font-display">
+                        <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight font-display">
                           Mediador Cabinda
                         </h2>
-                        <div className="flex flex-col items-center">
-                          <p className="text-[10px] font-black tracking-widest text-amber-500 uppercase flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping"></span>
-                            Unindo Angola
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 bg-red-600 rounded-full animate-ping"></span>
+                          <p className="text-[11px] font-black tracking-widest text-amber-400 uppercase">
+                            Unindo Angola • Luanda &harr; Cabinda
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-100 pt-3">
-                      <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                        Controle Aduaneiro e Logístico de Cargas Luanda &harr; Cabinda
-                      </p>
-                    </div>
-                  </div>
-
-                  {authError && (
-                    <div className="p-3 bg-red-50 border border-red-100 text-red-650 rounded-xl text-xs flex items-center gap-2 font-semibold">
-                      <span>⚠️</span> {authError}
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Código de Acesso ou E-mail
-                      </label>
-                      <input
-                        type="text"
-                        value={accessCode}
-                        onChange={(e) => {
-                          setAccessCode(e.target.value);
-                          setAuthError('');
-                        }}
-                        placeholder="Ex: bartolomeu.nolasco@gmail.com, admin99"
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-hidden focus:ring-1 focus:ring-amber-500 text-slate-800"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleLogin();
-                          }
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={rememberCode}
-                          onChange={(e) => setRememberCode(e.target.checked)}
-                          className="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer"
-                        />
-                        <span className="font-semibold text-slate-600">Lembrar neste dispositivo</span>
-                      </label>
-                    </div>
-
-                    <button
-                      onClick={handleLogin}
-                      className="w-full p-3 bg-slate-950 hover:bg-slate-900 active:scale-98 text-white font-extrabold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 border border-slate-800 uppercase tracking-wide"
-                    >
-                      <span>Entrar no Sistema</span>
-                      <span>➔</span>
-                    </button>
-                  </div>
-
-                  {/* Quick selection credentials block */}
-                  <div className="pt-4 border-t border-slate-100 space-y-3">
-                    <p className="text-[9px] uppercase font-black text-slate-400 tracking-wider">
-                      💡 Credenciais de Teste / Homologação do APK:
+                    <p className="text-xs text-slate-300 font-medium max-w-sm mx-auto mt-2 leading-relaxed">
+                      Intermediação de compras, despacho alfandegário e transporte seguro de cargas.
                     </p>
 
-                    <div className="space-y-2">
-                      {/* Client accounts */}
-                      <div>
-                        <p className="text-[8px] uppercase font-bold text-slate-400">Contas de Clientes (Área de Compras):</p>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          <button
-                            onClick={() => {
-                              setAccessCode('bartolomeu.nolasco@gmail.com');
-                              setAuthError('');
-                              speakText("Selecionado cliente Bartolomeu Nolasco");
-                            }}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
-                          >
-                            Bartolomeu (cli-1)
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAccessCode('avelina.chimpa@outlook.ao');
-                              setAuthError('');
-                              speakText("Selecionada cliente Avelina Chimpa");
-                            }}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
-                          >
-                            Avelina (cli-2)
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAccessCode('manuel.buco@outlook.com');
-                              setAuthError('');
-                              speakText("Selecionado cliente Manuel Buco");
-                            }}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
-                          >
-                            Manuel Buco (cli-3)
-                          </button>
-                        </div>
-                      </div>
+                    {/* TWO MODES TAB BAR */}
+                    <div className="grid grid-cols-2 gap-1.5 mt-5 p-1 bg-slate-900/90 rounded-2xl border border-white/10 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthPortalTab('login');
+                          setAuthError('');
+                          speakText("Aba de início de sessão selecionada");
+                        }}
+                        className={`py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          authPortalTab === 'login'
+                            ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <LogIn className="w-4 h-4" />
+                        <span className="truncate">Entrar</span>
+                      </button>
 
-                      {/* Admin accounts */}
-                      <div>
-                        <p className="text-[8px] uppercase font-bold text-slate-400">Conta Administrativa / Gestão:</p>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          <button
-                            onClick={() => {
-                              setAccessCode('admin99');
-                              setAuthError('');
-                              speakText("Selecionado acesso administrador");
-                            }}
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-bold rounded-lg transition-colors cursor-pointer"
-                          >
-                            admin99 (Gestão Completa)
-                          </button>
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthPortalTab('signup');
+                          setAuthError('');
+                          speakText("Aba de registo de nova conta selecionada");
+                        }}
+                        className={`py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          authPortalTab === 'signup'
+                            ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        <span className="truncate">Criar Conta</span>
+                      </button>
                     </div>
+                  </div>
+
+                  {/* FORM BODY */}
+                  <div className="p-6 sm:p-8 pt-2 space-y-5">
+                    
+                    {authError && (
+                      <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-start gap-2 font-semibold animate-shake">
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        <span>{authError}</span>
+                      </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* TAB 1: CRIAR NOVA CONTA (NOVO CLIENTE) */}
+                    {/* ============================================================ */}
+                    {authPortalTab === 'signup' && (
+                      <form onSubmit={handleRegisterClient} className="space-y-4 animate-fade-in">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                            <UserPlus className="w-4 h-4 text-amber-500" />
+                            <span>Criar Nova Conta de Cliente</span>
+                          </h3>
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                            Registe-se em segundos para solicitar orçamentos e receber encomendas em Angola.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {/* Nome Completo */}
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              Nome Completo *
+                            </label>
+                            <div className="relative">
+                              <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={regName}
+                                onChange={(e) => {
+                                  setRegName(e.target.value);
+                                  setAuthError('');
+                                }}
+                                placeholder="Ex: João Hilário António"
+                                required
+                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Telemóvel / WhatsApp */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Telemóvel / WhatsApp *
+                              </label>
+                              <div className="relative">
+                                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  type="tel"
+                                  value={regPhone}
+                                  onChange={(e) => {
+                                    setRegPhone(e.target.value);
+                                    setAuthError('');
+                                  }}
+                                  placeholder="Ex: 942 043 293"
+                                  required
+                                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                />
+                              </div>
+                              <p className="text-[9px] text-slate-400">Unitel ou Movicel</p>
+                            </div>
+
+                            {/* E-mail */}
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                E-mail (Opcional)
+                              </label>
+                              <div className="relative">
+                                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  type="email"
+                                  value={regEmail}
+                                  onChange={(e) => {
+                                    setRegEmail(e.target.value);
+                                    setAuthError('');
+                                  }}
+                                  placeholder="seuemail@exemplo.com"
+                                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                />
+                              </div>
+                              <p className="text-[9px] text-slate-400">Para faturas e comprovativos</p>
+                            </div>
+                          </div>
+
+                          {/* Província e Município (Escrita Livre com Sugestões) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Província de Destino *
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  list="app-provinces-list"
+                                  value={regProvince}
+                                  onChange={(e) => setRegProvince(e.target.value)}
+                                  placeholder="Escreva a província (ex: Cabinda, Luanda...)"
+                                  required
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                />
+                                <datalist id="app-provinces-list">
+                                  {PROVINCES_OF_ANGOLA.map((prov) => (
+                                    <option key={prov} value={prov} />
+                                  ))}
+                                </datalist>
+                              </div>
+                              <p className="text-[9px] text-slate-400">Pode escrever qualquer província</p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                Município / Comuna *
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  list="app-municipalities-list"
+                                  value={regMunicipality}
+                                  onChange={(e) => setRegMunicipality(e.target.value)}
+                                  placeholder="Escreva o município (ex: Cabinda, Cazenga...)"
+                                  required
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                />
+                                <datalist id="app-municipalities-list">
+                                  {(MUNICIPALITIES[regProvince] || [
+                                    'Cabinda (Sede)', 'Cacongo', 'Buco-Zau', 'Belize',
+                                    'Luanda', 'Cazenga', 'Viana', 'Belas', 'Cacuaco', 'Talatona', 'Kilamba Kiaxi',
+                                    'Benguela', 'Lobito', 'Huambo', 'Lubango', 'Uíge', 'Malanje', 'Soyo'
+                                  ]).map((mun) => (
+                                    <option key={mun} value={mun} />
+                                  ))}
+                                </datalist>
+                              </div>
+                              <p className="text-[9px] text-slate-400">Pode escrever qualquer município</p>
+                            </div>
+                          </div>
+
+                          {/* Bairro / Ponto de Referência */}
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              Bairro / Ponto de Referência
+                            </label>
+                            <div className="relative">
+                              <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={regBairro}
+                                onChange={(e) => setRegBairro(e.target.value)}
+                                placeholder="Ex: Bairro Lândana, perto do Mercado Municipal"
+                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Palavra-passe / Senha */}
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              Criar Senha de Acesso (Opcional)
+                            </label>
+                            <div className="relative">
+                              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type={showRegPassword ? "text" : "password"}
+                                value={regPassword}
+                                onChange={(e) => setRegPassword(e.target.value)}
+                                placeholder="•••••••• (Crie uma senha pessoal)"
+                                className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowRegPassword(!showRegPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              >
+                                {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={rememberCode}
+                              onChange={(e) => setRememberCode(e.target.checked)}
+                              className="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span className="font-semibold text-slate-700">Manter sessão ativa neste dispositivo</span>
+                          </label>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-98 cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wide border border-amber-600"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>Criar Minha Conta e Entrar</span>
+                          <span>➔</span>
+                        </button>
+
+                        <p className="text-center text-xs text-slate-500">
+                          Já possui uma conta?{' '}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthPortalTab('login');
+                              setAuthError('');
+                            }}
+                            className="font-bold text-amber-600 hover:underline cursor-pointer"
+                          >
+                            Iniciar Sessão aqui
+                          </button>
+                        </p>
+                      </form>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* TAB 2: INICIAR SESSÃO (CLIENTE EXISTENTE OU ADMIN) */}
+                    {/* ============================================================ */}
+                    {authPortalTab === 'login' && (
+                      <form onSubmit={handleClientLogin} className="space-y-4 animate-fade-in">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                            <LogIn className="w-4 h-4 text-amber-500" />
+                            <span>Entrar na Minha Conta</span>
+                          </h3>
+                          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                            Aceda com o seu e-mail, telemóvel ou credencial autorizada.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              E-mail, Telemóvel ou Código de Acesso *
+                            </label>
+                            <div className="relative">
+                              <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type="text"
+                                value={loginIdentifier}
+                                onChange={(e) => {
+                                  setLoginIdentifier(e.target.value);
+                                  setAuthError('');
+                                }}
+                                placeholder="Ex: 942043293, seuemail@exemplo.com ou admin99"
+                                required
+                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                              Palavra-passe / Senha (Opcional)
+                            </label>
+                            <div className="relative">
+                              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              <input
+                                type={showLoginPassword ? "text" : "password"}
+                                value={loginPassword}
+                                onChange={(e) => setLoginPassword(e.target.value)}
+                                placeholder="••••••••"
+                                className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              >
+                                {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={rememberCode}
+                              onChange={(e) => setRememberCode(e.target.checked)}
+                              className="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span className="font-semibold text-slate-700">Lembrar neste dispositivo</span>
+                          </label>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-3.5 bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-98 cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wide border border-slate-800"
+                        >
+                          <span>Entrar na Minha Conta</span>
+                          <span>➔</span>
+                        </button>
+
+                        {/* Registered Accounts or Clean State notice */}
+                        {clients.length === 0 ? (
+                          <div className="pt-2 border-t border-slate-100">
+                            <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-2xl text-center space-y-1.5">
+                              <p className="text-[11px] font-black text-amber-950">
+                                ℹ️ Nenhuma conta de cliente gravada ainda.
+                              </p>
+                              <p className="text-[10px] text-amber-800 font-medium">
+                                Cada utilizador deve registar a sua conta individual com nome, telemóvel e província.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAuthPortalTab('signup');
+                                  setAuthError('');
+                                  speakText("Abrindo formulário de criação de nova conta.");
+                                }}
+                                className="mt-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>Criar a Minha Conta Agora</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                            <p className="text-[9px] uppercase font-bold text-slate-400">
+                              Contas Registadas neste Dispositivo:
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {clients.slice(0, 5).map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setLoginIdentifier(c.email || c.phone || c.name);
+                                    setAuthError('');
+                                    speakText(`Cliente ${c.name} selecionado`);
+                                  }}
+                                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg transition-colors cursor-pointer truncate max-w-[170px]"
+                                >
+                                  {c.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <p className="text-center text-xs text-slate-500 pt-1">
+                          Ainda não tem conta?{' '}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthPortalTab('signup');
+                              setAuthError('');
+                            }}
+                            className="font-bold text-amber-600 hover:underline cursor-pointer"
+                          >
+                            Criar Nova Conta Grátis
+                          </button>
+                        </p>
+                      </form>
+                    )}
+
                   </div>
                 </div>
               </div>
             ) : role === 'client' ? (
-              <ClientDashboard
-                clients={clients}
-                activeClientId={activeClientId}
-                onSetClient={handleSetClient}
-                onAddClient={handleAddClient}
-                orders={orders}
-                onAddOrder={handleAddOrder}
-                onUpdateOrder={handleUpdateOrder}
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                onMarkChannelAsRead={handleMarkChannelAsRead}
-                notifications={notifications}
-                onMarkNotificationRead={handleMarkNotificationRead}
-                currentView={currentView}
-                setCurrentView={setCurrentView}
-                fontSize={fontSize}
-                setFontSize={setFontSize}
-                highContrast={highContrast}
-                setHighContrast={setHighContrast}
-                textToSpeech={textToSpeech}
-                setTextToSpeech={setTextToSpeech}
-                homeSearchQuery={homeSearchQuery}
-                setHomeSearchQuery={setHomeSearchQuery}
-                carriersList={carriersList}
-                suppliers={suppliers}
-                onUpdateSupplier={handleUpdateSupplier}
-                supplierProducts={supplierProducts}
-                onUpdateSupplierProduct={handleUpdateSupplierProduct}
-                onCreateSupplierProduct={handleCreateSupplierProduct}
-                supplierMessages={supplierMessages}
-                onSendSupplierMessage={handleSendSupplierMessage}
-                collaborators={collaborators}
-                onUpdateCollaborators={handleUpdateCollaborators}
-                collaboratorSales={collaboratorSales}
-                onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
-                supplierServices={supplierServices}
-                onUpdateSupplierService={handleUpdateSupplierService}
-                onCreateSupplierService={handleCreateSupplierService}
-                serviceRequests={serviceRequests}
-                onCreateServiceRequest={handleCreateServiceRequest}
-                onUpdateServiceRequest={handleUpdateServiceRequest}
-              />
+              <div className="flex flex-col flex-1 w-full">
+                {isAdminLoggedIn && (
+                  <div className="sticky top-0 z-40 bg-slate-950 text-amber-400 border-b border-amber-400/40 px-4 py-2 flex items-center justify-between shadow-lg text-xs font-bold animate-fade-in">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-amber-400 text-slate-950 font-black rounded-md text-[10px] uppercase tracking-wider">
+                        Modo Administrador
+                      </span>
+                      <span className="text-slate-200 hidden sm:inline">
+                        Você está a pré-visualizar a Área do Cliente como Gestor.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setRole('admin');
+                          speakText("Retornando ao Painel de Gestão.");
+                        }}
+                        className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 text-xs"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>➔ Voltar ao Painel de Gestão</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <ClientDashboard
+                  clients={clients}
+                  activeClientId={activeClientId}
+                  onSetClient={handleSetClient}
+                  onAddClient={handleAddClient}
+                  orders={orders}
+                  onAddOrder={handleAddOrder}
+                  onUpdateOrder={handleUpdateOrder}
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  onMarkChannelAsRead={handleMarkChannelAsRead}
+                  notifications={notifications}
+                  onMarkNotificationRead={handleMarkNotificationRead}
+                  currentView={currentView}
+                  setCurrentView={setCurrentView}
+                  fontSize={fontSize}
+                  setFontSize={setFontSize}
+                  highContrast={highContrast}
+                  setHighContrast={setHighContrast}
+                  textToSpeech={textToSpeech}
+                  setTextToSpeech={setTextToSpeech}
+                  homeSearchQuery={homeSearchQuery}
+                  setHomeSearchQuery={setHomeSearchQuery}
+                  carriersList={carriersList}
+                  suppliers={suppliers}
+                  onUpdateSupplier={handleUpdateSupplier}
+                  supplierProducts={supplierProducts}
+                  onUpdateSupplierProduct={handleUpdateSupplierProduct}
+                  onCreateSupplierProduct={handleCreateSupplierProduct}
+                  supplierMessages={supplierMessages}
+                  onSendSupplierMessage={handleSendSupplierMessage}
+                  collaborators={collaborators}
+                  onUpdateCollaborators={handleUpdateCollaborators}
+                  collaboratorSales={collaboratorSales}
+                  onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
+                  supplierServices={supplierServices}
+                  onUpdateSupplierService={handleUpdateSupplierService}
+                  onCreateSupplierService={handleCreateSupplierService}
+                  serviceRequests={serviceRequests}
+                  onCreateServiceRequest={handleCreateServiceRequest}
+                  onUpdateServiceRequest={handleUpdateServiceRequest}
+                  logisticsConfig={logisticsConfig}
+                  knowledgeBase={knowledgeBase}
+                />
+              </div>
             ) : (
               <AdminDashboard
                 clients={clients}
@@ -1891,6 +2574,14 @@ export default function App() {
                 serviceRequests={serviceRequests}
                 onCreateServiceRequest={handleCreateServiceRequest}
                 onUpdateServiceRequest={handleUpdateServiceRequest}
+                logisticsConfig={logisticsConfig}
+                onUpdateLogisticsConfig={handleUpdateLogisticsConfig}
+                knowledgeBase={knowledgeBase}
+                onUpdateKnowledgeItem={handleUpdateKnowledgeItem}
+                onCreateKnowledgeItem={handleCreateKnowledgeItem}
+                onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
+                auditLogs={auditLogs}
+                onResetKnowledgeBaseToDefaults={handleResetKnowledgeBaseToDefaults}
                 onChangeRole={setRole}
                 onChangeView={setCurrentView}
               />
@@ -2121,6 +2812,8 @@ export default function App() {
         clientName={clients.find(c => c.id === activeClientId)?.name}
         clientTier={clients.find(c => c.id === activeClientId)?.tier}
         botSettings={botSettings}
+        dynamicLogisticsConfig={logisticsConfig}
+        dynamicKnowledgeBase={knowledgeBase}
       />
 
     </div>

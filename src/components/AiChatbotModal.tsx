@@ -25,8 +25,13 @@ import {
   MessageSquare,
   Radio
 } from 'lucide-react';
-import { BotMessage, BotSettings } from '../types';
-import { solveBotQueryLocally } from '../utils/aiBotKnowledge';
+import { BotMessage, BotSettings, DynamicKnowledgeItem, GeneralLogisticsSettings } from '../types';
+import { 
+  solveBotQueryLocally, 
+  getStoredLogisticsConfig, 
+  getStoredKnowledgeBase, 
+  buildLogisticsAIContext 
+} from '../utils/aiBotKnowledge';
 
 interface AiChatbotModalProps {
   isOpen: boolean;
@@ -35,6 +40,8 @@ interface AiChatbotModalProps {
   clientName?: string;
   clientTier?: string;
   botSettings?: BotSettings;
+  dynamicLogisticsConfig?: GeneralLogisticsSettings;
+  dynamicKnowledgeBase?: DynamicKnowledgeItem[];
 }
 
 const DEFAULT_SETTINGS: BotSettings = {
@@ -68,8 +75,34 @@ export default function AiChatbotModal({
   onNavigateView,
   clientName,
   clientTier,
-  botSettings = DEFAULT_SETTINGS
+  botSettings = DEFAULT_SETTINGS,
+  dynamicLogisticsConfig,
+  dynamicKnowledgeBase
 }: AiChatbotModalProps) {
+  const currentLogistics = dynamicLogisticsConfig || getStoredLogisticsConfig();
+  const currentKnowledge = dynamicKnowledgeBase || getStoredKnowledgeBase();
+
+  // Visual Theme: 'light' (Clean White AliExpress style) by default, or 'dark' (Facebook Messenger style)
+  const [chatTheme, setChatTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('mediador_cabinda_chat_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch {
+      // fallback
+    }
+    return 'light'; // Default to pristine Clean White (AliExpress style)
+  });
+
+  const toggleTheme = () => {
+    const next = chatTheme === 'light' ? 'dark' : 'light';
+    setChatTheme(next);
+    try {
+      localStorage.setItem('mediador_cabinda_chat_theme', next);
+    } catch {
+      // ignore
+    }
+  };
+
   const [messages, setMessages] = useState<BotMessage[]>(() => {
     try {
       const saved = localStorage.getItem('mediador_cabinda_chatbot_history');
@@ -109,6 +142,18 @@ export default function AiChatbotModal({
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -208,7 +253,9 @@ export default function AiChatbotModal({
     setIsLoading(true);
 
     try {
-      // 1. Attempt Server-Side Gemini API call
+      // 1. Attempt Server-Side Gemini API call with dynamic logistics and knowledge context
+      const logisticsContextText = buildLogisticsAIContext(currentLogistics, currentKnowledge);
+
       const response = await fetch('/api/bot/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -216,7 +263,9 @@ export default function AiChatbotModal({
           message: textToSend,
           history: updatedMessages.slice(-6),
           clientName: clientName || 'Cliente Cabinda',
-          clientTier: clientTier || 'Standard'
+          clientTier: clientTier || 'Standard',
+          dynamicLogisticsConfig: currentLogistics,
+          dynamicKnowledgeContext: logisticsContextText
         })
       });
 
@@ -248,9 +297,9 @@ export default function AiChatbotModal({
         }
       }
 
-      // 2. If Gemini API was offline / fallback, use our local knowledge engine
+      // 2. If Gemini API was offline / fallback / quota limit, use our intelligent local knowledge engine
       if (!botText) {
-        const localAnswer = solveBotQueryLocally(textToSend);
+        const localAnswer = solveBotQueryLocally(textToSend, currentKnowledge, currentLogistics);
         botText = localAnswer.text;
         suggestedQuestions = localAnswer.suggestedQuestions;
         actionLink = localAnswer.actionLink;
@@ -274,7 +323,7 @@ export default function AiChatbotModal({
       }
     } catch {
       // Local fallback in case of absolute network drop
-      const localAnswer = solveBotQueryLocally(textToSend);
+      const localAnswer = solveBotQueryLocally(textToSend, currentKnowledge, currentLogistics);
       const fallbackMsg: BotMessage = {
         id: `bot-${Date.now()}`,
         sender: 'bot',
@@ -319,45 +368,74 @@ export default function AiChatbotModal({
 
   if (!isOpen) return null;
 
+  const isLight = chatTheme === 'light';
+
   return (
     <div 
-      className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
       id="ai-chatbot-modal"
+      onClick={(e) => {
+        // Close modal when clicking on the dark backdrop outside the chat box
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div 
-        className="bg-slate-950 text-slate-100 w-full sm:max-w-xl h-[94vh] sm:h-[720px] rounded-t-[32px] sm:rounded-[32px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden border-2 border-amber-400/40 animate-scale-up relative"
+        className={`w-full sm:max-w-xl h-[95vh] sm:h-[730px] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-colors duration-200 animate-scale-up relative border ${
+          isLight
+            ? 'bg-white text-slate-900 border-slate-200'
+            : 'bg-slate-950 text-slate-100 border-slate-800'
+        }`}
         id="ai-chatbot-card"
       >
-        {/* Soft Background Radial Light Accents */}
-        <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl"></div>
-        <div className="pointer-events-none absolute -bottom-24 -right-24 w-72 h-72 bg-sky-500/10 rounded-full blur-3xl"></div>
-
-        {/* HIGH-TECH HEADER */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-amber-500/20 shrink-0 relative z-10">
+        {/* TOP HEADER: Clear branding + Highly visible Close button */}
+        <div 
+          className={`px-4 sm:px-5 py-3.5 flex items-center justify-between border-b shrink-0 relative z-10 ${
+            isLight
+              ? 'bg-white border-slate-200 text-slate-900 shadow-xs'
+              : 'bg-slate-900 border-slate-800 text-white'
+          }`}
+        >
+          {/* Left: Avatar + Title */}
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-300 text-slate-950 flex items-center justify-center font-black shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-300 text-slate-950 flex items-center justify-center font-black shadow-md">
                 <Bot className="w-5 h-5" />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse shadow-sm"></span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full animate-pulse shadow-xs"></span>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-sm text-white font-display tracking-wide">
-                  {botSettings.botName || 'Mano Mediador IA'}
+                <h3 className="font-extrabold text-sm font-display tracking-tight text-slate-900 dark:text-white">
+                  {botSettings.botName || 'Assistente Mediador IA'}
                 </h3>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block"></span>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
                   Online 24/7
                 </span>
               </div>
-              <p className="text-[10.5px] text-slate-400 font-medium">
-                Assistente Inteligente Oficial do Mediador Cabinda
+              <p className="text-[11px] text-slate-500 font-medium">
+                Atendimento Oficial Mediador Cabinda Lda
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-slate-300">
+          {/* Right Action Controls + BIG VISIBLE CLOSE BUTTON */}
+          <div className="flex items-center gap-1.5">
+            {/* Theme Toggle (AliExpress White vs Facebook Dark) */}
+            <button
+              onClick={toggleTheme}
+              title={isLight ? 'Alternar para Modo Escuro (Facebook)' : 'Alternar para Fundo Branco (AliExpress)'}
+              className={`p-2 rounded-xl transition-all cursor-pointer text-xs font-semibold flex items-center gap-1 border ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+            >
+              {isLight ? '🌙' : '☀️'}
+            </button>
+
             {/* Audio narration toggle */}
             <button
               onClick={() => {
@@ -367,8 +445,12 @@ export default function AiChatbotModal({
                 }
               }}
               title={ttsActive ? 'Desativar Leitura de Voz Automática' : 'Ativar Leitura de Voz Automática'}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                ttsActive ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+              className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                ttsActive 
+                  ? 'bg-amber-400 text-slate-950 font-bold border-amber-500 shadow-xs' 
+                  : isLight 
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200' 
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
             >
               {ttsActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -378,41 +460,62 @@ export default function AiChatbotModal({
             <button
               onClick={handleClearChat}
               title="Limpar Conversa"
-              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded-xl transition-all cursor-pointer"
+              className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 border-slate-200 hover:border-red-200'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-red-400 border-slate-700'
+              }`}
             >
               <Trash2 className="w-4 h-4" />
             </button>
 
-            {/* Close modal */}
+            {/* ULTRA-PROMINENT CLOSE "X" BUTTON (Impossible to miss) */}
             <button
               onClick={onClose}
-              title="Fechar Assistente"
-              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer ml-1"
+              id="close-ai-chatbot-modal-btn"
+              title="Fechar Chat e Voltar (ESC)"
+              aria-label="Fechar Assistente IA"
+              className="ml-1 pl-3 pr-3.5 py-1.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-red-600/20 transition-all cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 stroke-[3]" />
+              <span className="font-display">Fechar</span>
             </button>
           </div>
         </div>
 
-        {/* QUICK CATEGORY CHIPS BAR */}
-        <div className="bg-slate-900/90 border-b border-slate-800/80 px-3.5 py-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 relative z-10">
-          <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Tópicos Rápidos:
+        {/* QUICK CATEGORY CHIPS BAR (AliExpress Clean Styling) */}
+        <div 
+          className={`px-3.5 py-2.5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 border-b relative z-10 ${
+            isLight
+              ? 'bg-slate-50/90 border-slate-200'
+              : 'bg-slate-900 border-slate-800'
+          }`}
+        >
+          <span className="text-[11px] font-black text-amber-600 uppercase tracking-wider shrink-0 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Dúvidas Rápidas:
           </span>
           {QUICK_TOPICS.map((topic, tIdx) => (
             <button
               key={tIdx}
               onClick={() => handleSendMessage(topic.query)}
-              className="px-3 py-1 bg-slate-800/80 hover:bg-amber-400 hover:text-slate-950 text-slate-300 text-[11px] font-semibold rounded-xl border border-slate-700 hover:border-amber-400 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
+              className={`px-3 py-1 text-[11.5px] font-medium rounded-xl border shrink-0 transition-all cursor-pointer active:scale-95 whitespace-nowrap shadow-2xs ${
+                isLight
+                  ? 'bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-950 border-slate-250 hover:border-amber-400'
+                  : 'bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-slate-200 border-slate-700 hover:border-amber-400'
+              }`}
             >
               {topic.label}
             </button>
           ))}
         </div>
 
-        {/* MESSAGES STREAM AREA */}
+        {/* MESSAGES STREAM AREA (Clean White AliExpress Canvas or Dark Mode) */}
         <div 
-          className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4.5 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" 
+          className={`flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 ${
+            isLight
+              ? 'bg-slate-50/60'
+              : 'bg-slate-950'
+          }`} 
           id="ai-chat-messages-container"
         >
           {messages.map((msg) => {
@@ -426,35 +529,43 @@ export default function AiChatbotModal({
                 {/* Sender Tag Header */}
                 <div className="flex items-center gap-2 px-1">
                   {!isUser ? (
-                    <span className="text-[10.5px] font-bold text-amber-400 flex items-center gap-1.5">
-                      <Bot className="w-3.5 h-3.5" />
-                      {botSettings.botName || 'Mano Mediador IA'}
+                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                      <Bot className="w-3.5 h-3.5 text-amber-500" />
+                      <span className={isLight ? 'text-slate-900 font-extrabold' : 'text-slate-200'}>
+                        {botSettings.botName || 'Assistente Mediador IA'}
+                      </span>
                       {msg.source === 'gemini' ? (
-                        <span className="text-[8.5px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded-full font-mono">
-                          ✨ Gemini AI
+                        <span className="text-[9px] bg-amber-100 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded-full font-bold">
+                          ✨ Gemini IA
                         </span>
                       ) : (
-                        <span className="text-[8.5px] bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.2 rounded-full font-mono">
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold border ${
+                          isLight 
+                            ? 'bg-slate-100 text-slate-700 border-slate-200' 
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}>
                           🛡️ Base Oficial
                         </span>
                       )}
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-slate-400">
+                    <span className="text-[11px] font-bold text-slate-500">
                       👤 Você
                     </span>
                   )}
-                  <span className="text-[9.5px] text-slate-500 font-mono">
+                  <span className="text-[10px] text-slate-400 font-mono">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
                 {/* Message Bubble Box */}
                 <div 
-                  className={`max-w-[92%] sm:max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[92%] sm:max-w-[85%] rounded-2xl p-4 text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap ${
                     isUser
-                      ? 'bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 text-slate-950 font-semibold rounded-tr-xs shadow-md shadow-amber-500/10'
-                      : 'bg-slate-900/90 border border-slate-750 text-slate-100 rounded-tl-xs shadow-md shadow-black/40 backdrop-blur-xs'
+                      ? 'bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 text-slate-950 font-semibold rounded-tr-xs shadow-sm shadow-amber-500/20'
+                      : isLight
+                        ? 'bg-white border border-slate-200/90 text-slate-800 rounded-tl-xs shadow-xs'
+                        : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-xs shadow-md'
                   }`}
                 >
                   {/* Message Body Content */}
@@ -470,7 +581,13 @@ export default function AiChatbotModal({
                                   return (
                                     <strong 
                                       key={pIdx} 
-                                      className={isUser ? 'text-slate-950 font-black' : 'text-amber-300 font-bold'}
+                                      className={
+                                        isUser 
+                                          ? 'text-slate-950 font-black' 
+                                          : isLight 
+                                            ? 'text-slate-950 font-black' 
+                                            : 'text-amber-300 font-bold'
+                                      }
                                     >
                                       {p.slice(2, -2)}
                                     </strong>
@@ -487,7 +604,9 @@ export default function AiChatbotModal({
 
                   {/* Direct Action Link / Navigation Button */}
                   {msg.actionLink && (
-                    <div className="mt-3.5 pt-3 border-t border-slate-800 flex items-center justify-between">
+                    <div className={`mt-3.5 pt-3 border-t flex items-center justify-between ${
+                      isLight ? 'border-slate-100' : 'border-slate-800'
+                    }`}>
                       <button
                         onClick={() => {
                           if (onNavigateView && msg.actionLink?.view) {
@@ -506,30 +625,36 @@ export default function AiChatbotModal({
 
                   {/* Utility bar for Bot Message: Audio speech & Copy to clipboard */}
                   {!isUser && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[10.5px] text-slate-400">
+                    <div className={`mt-3 pt-2.5 border-t flex items-center justify-between text-[11px] ${
+                      isLight ? 'border-slate-100 text-slate-500' : 'border-slate-800 text-slate-400'
+                    }`}>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => speakText(msg.text, msg.id)}
                           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                             speakingMsgId === msg.id 
-                              ? 'bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30' 
-                              : 'hover:text-slate-200 hover:bg-slate-800'
+                              ? 'bg-amber-100 text-amber-900 font-bold border border-amber-200' 
+                              : isLight 
+                                ? 'hover:text-slate-900 hover:bg-slate-100' 
+                                : 'hover:text-slate-200 hover:bg-slate-800'
                           }`}
                           title="Ouvir Resposta por Áudio"
                         >
                           <Volume2 className="w-3.5 h-3.5" />
-                          <span>{speakingMsgId === msg.id ? 'A reproduzir áudio...' : 'Ouvir'}</span>
+                          <span>{speakingMsgId === msg.id ? 'A reproduzir...' : 'Ouvir'}</span>
                         </button>
 
                         <button
                           onClick={() => copyToClipboard(msg.text, msg.id)}
-                          className="flex items-center gap-1.5 hover:text-slate-200 hover:bg-slate-800 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                            isLight ? 'hover:text-slate-900 hover:bg-slate-100' : 'hover:text-slate-200 hover:bg-slate-800'
+                          }`}
                           title="Copiar Resposta"
                         >
                           {copiedId === msg.id ? (
                             <>
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              <span className="text-emerald-400 font-bold">Copiado</span>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-600 font-bold">Copiado</span>
                             </>
                           ) : (
                             <>
@@ -540,7 +665,7 @@ export default function AiChatbotModal({
                         </button>
                       </div>
 
-                      <span className="text-[9px] text-slate-500 font-mono hidden sm:inline">
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
                         Mediador Cabinda 24/7
                       </span>
                     </div>
@@ -554,9 +679,13 @@ export default function AiChatbotModal({
                       <button
                         key={sIdx}
                         onClick={() => handleSendMessage(sug)}
-                        className="px-3 py-1.5 bg-slate-900/90 hover:bg-amber-400 hover:text-slate-950 text-slate-300 text-[11px] font-semibold rounded-xl border border-slate-800 hover:border-amber-400 transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+                        className={`px-3 py-1.5 text-[11.5px] font-medium rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 active:scale-95 ${
+                          isLight
+                            ? 'bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-950 border-slate-200 hover:border-amber-400'
+                            : 'bg-slate-900 hover:bg-amber-400 hover:text-slate-950 text-slate-300 border-slate-800 hover:border-amber-400'
+                        }`}
                       >
-                        <span className="text-amber-400 group-hover:text-slate-950">💬</span> 
+                        <span className="text-amber-500">💬</span> 
                         <span>{sug}</span>
                       </button>
                     ))}
@@ -568,19 +697,29 @@ export default function AiChatbotModal({
 
           {/* Typing Indicator */}
           {isLoading && (
-            <div className="flex items-center gap-2.5 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl rounded-tl-xs w-44 text-slate-300 text-xs shadow-md animate-pulse">
+            <div className={`flex items-center gap-2.5 p-3.5 rounded-2xl rounded-tl-xs w-44 text-xs shadow-xs border animate-pulse ${
+              isLight
+                ? 'bg-white border-slate-200 text-slate-700'
+                : 'bg-slate-900 border-slate-800 text-slate-300'
+            }`}>
               <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"></span>
               <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
               <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-              <span className="text-[11px] font-bold text-amber-300 ml-1 font-mono">A pensar...</span>
+              <span className="text-[11.5px] font-bold text-amber-700 ml-1 font-mono">A escrever...</span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* INPUT FORM DOCK */}
-        <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800/90 shrink-0 space-y-2 relative z-10">
+        {/* INPUT FORM DOCK (Clean White AliExpress or Dark) */}
+        <div 
+          className={`p-3 sm:p-4 border-t shrink-0 space-y-2 relative z-10 ${
+            isLight
+              ? 'bg-white border-slate-200'
+              : 'bg-slate-900 border-slate-800'
+          }`}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -596,7 +735,9 @@ export default function AiChatbotModal({
               className={`p-3 rounded-2xl border transition-all cursor-pointer shrink-0 ${
                 isListeningVoice
                   ? 'bg-red-500 border-red-400 text-white animate-pulse shadow-lg shadow-red-500/30'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-750 hover:border-amber-400'
+                  : isLight
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 hover:border-amber-400'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-amber-400'
               }`}
             >
               <Mic className="w-4.5 h-4.5" />
@@ -607,8 +748,12 @@ export default function AiChatbotModal({
               type="text"
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              placeholder="Escreva a sua dúvida sobre encomendas, frete, prazos, taxas..."
-              className="flex-1 p-3 px-4 bg-slate-900 border border-slate-750 rounded-2xl text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:bg-slate-850 focus:outline-hidden focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all font-medium"
+              placeholder="Escreva a sua dúvida sobre compras, fretes, prazos, taxas..."
+              className={`flex-1 p-3 px-4 rounded-2xl text-xs sm:text-sm border transition-all font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 ${
+                isLight
+                  ? 'bg-slate-50 focus:bg-white text-slate-900 placeholder:text-slate-400 border-slate-200'
+                  : 'bg-slate-800 focus:bg-slate-750 text-white placeholder:text-slate-500 border-slate-700'
+              }`}
               disabled={isLoading}
             />
 
@@ -618,7 +763,9 @@ export default function AiChatbotModal({
               className={`p-3 px-4.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-xs sm:text-sm cursor-pointer shadow-md shrink-0 ${
                 inputQuery.trim() && !isLoading
                   ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black active:scale-95 shadow-amber-400/20'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  : isLight
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
               }`}
             >
               <Send className="w-4 h-4" />
@@ -626,24 +773,35 @@ export default function AiChatbotModal({
             </button>
           </form>
 
-          {/* Bottom Security Assurance & Escalation Link */}
-          <div className="flex items-center justify-between text-[10.5px] text-slate-400 px-1 pt-1">
-            <span className="flex items-center gap-1.5 text-slate-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Respostas baseadas nas políticas oficiais de Cabinda
+          {/* Bottom Security Assurance & Escalation Link + Secondary Close Button */}
+          <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-1">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Respostas oficiais do Mediador Cabinda</span>
             </span>
 
-            {botSettings.allowWhatsAppEscalation && (
-              <a
-                href={`https://wa.me/${botSettings.whatsAppNumber.replace(/\+/g, '')}?text=Ol%C3%A1%2C+estou+no+aplicativo+Mediador-Cabinda+e+preciso+de+ajuda`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 font-extrabold flex items-center gap-1 hover:underline cursor-pointer"
+            <div className="flex items-center gap-3">
+              {botSettings.allowWhatsAppEscalation && (
+                <a
+                  href={`https://wa.me/${botSettings.whatsAppNumber.replace(/\+/g, '')}?text=Ol%C3%A1%2C+estou+no+aplicativo+Mediador-Cabinda+e+preciso+de+ajuda`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-700 hover:text-emerald-800 font-extrabold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <span>WhatsApp</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+
+              {/* Bottom explicit close link */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-slate-400 hover:text-red-600 font-bold hover:underline cursor-pointer text-[10.5px]"
               >
-                <span>Falar com Atendente no WhatsApp</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
+                ✕ Sair do Chat
+              </button>
+            </div>
           </div>
         </div>
       </div>
