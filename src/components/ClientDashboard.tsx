@@ -467,7 +467,8 @@ export default function ClientDashboard({
     if (currentView === 'fazer-pedido' && prefilledMarketProduct) {
       const artLocation = prefilledMarketProduct.location || 'Luanda';
       const artAvailability = prefilledMarketProduct.availableFromDate || 'Imediata';
-      setNewOrderForm({
+      setNewOrderForm(prev => ({
+        ...prev,
         productName: prefilledMarketProduct.name,
         quantity: 1,
         supplierName: prefilledMarketProduct.supplierName,
@@ -476,8 +477,10 @@ export default function ClientDashboard({
         notes: `Adquirido através do Mercado de Fornecedores Homologados. ID Fornecedor: ${prefilledMarketProduct.supplierId}. Localização do Artigo: ${artLocation}. Disponibilidade de Envio: ${artAvailability}. Preço Base: ${prefilledMarketProduct.price.toLocaleString('pt-AO')} AOA.`,
         deliveryOption: 'escritorio',
         deliveryAddress: '',
-        preferredCarrierId: ''
-      });
+        preferredCarrierId: '',
+        routeDirection: 'Luanda-Cabinda',
+        transportMode: 'maritimo'
+      }));
       
       // Seed product image as first attachment
       setTempPhotos([

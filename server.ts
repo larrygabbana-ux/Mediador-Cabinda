@@ -5,10 +5,61 @@
 
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
 const PORT = 3000;
+const DATA_FILE = path.join(process.cwd(), 'server-data.json');
+
+// In-memory synchronized state
+let serverState: {
+  clients: any[];
+  orders: any[];
+  messages: any[];
+  suppliers: any[];
+  supplierProducts: any[];
+  supplierServices: any[];
+  serviceRequests: any[];
+  collaborators: any[];
+  collaboratorSales: any[];
+  notifications: any[];
+  logisticsConfig: any;
+  lastUpdated: number;
+} = {
+  clients: [],
+  orders: [],
+  messages: [],
+  suppliers: [],
+  supplierProducts: [],
+  supplierServices: [],
+  serviceRequests: [],
+  collaborators: [],
+  collaboratorSales: [],
+  notifications: [],
+  logisticsConfig: null,
+  lastUpdated: Date.now()
+};
+
+// Load saved data from disk if exists
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    serverState = { ...serverState, ...parsed, lastUpdated: Date.now() };
+    console.log(`[Sync] Loaded persistent database from ${DATA_FILE} (${serverState.orders.length} orders, ${serverState.clients.length} clients)`);
+  }
+} catch (err) {
+  console.warn('[Sync] Failed to read server-data.json, starting with fresh in-memory database:', err);
+}
+
+function persistServerState() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(serverState, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Sync] Error saving state to disk:', err);
+  }
+}
 
 // Lazy initialization for Gemini AI SDK
 let aiClient: GoogleGenAI | null = null;
@@ -184,6 +235,142 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       aiConfigured: Boolean(process.env.GEMINI_API_KEY)
     });
+  });
+
+  // 1.1 Real-time cross-device Synchronization Endpoints
+  // GET full or delta database state
+  app.get('/api/sync/state', (req, res) => {
+    res.json({
+      success: true,
+      data: serverState,
+      timestamp: Date.now()
+    });
+  });
+
+  // POST full or partial bulk state
+  app.post('/api/sync/bulk', (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (Array.isArray(payload.clients)) {
+        const clientMap = new Map(serverState.clients.map(c => [c.id, c]));
+        payload.clients.forEach((c: any) => { if (c && c.id) clientMap.set(c.id, { ...clientMap.get(c.id), ...c }); });
+        serverState.clients = Array.from(clientMap.values());
+      }
+      if (Array.isArray(payload.orders)) {
+        const orderMap = new Map(serverState.orders.map(o => [o.id, o]));
+        payload.orders.forEach((o: any) => { if (o && o.id) orderMap.set(o.id, { ...orderMap.get(o.id), ...o }); });
+        serverState.orders = Array.from(orderMap.values());
+      }
+      if (Array.isArray(payload.messages)) {
+        const msgMap = new Map(serverState.messages.map(m => [m.id, m]));
+        payload.messages.forEach((m: any) => { if (m && m.id) msgMap.set(m.id, { ...msgMap.get(m.id), ...m }); });
+        serverState.messages = Array.from(msgMap.values());
+      }
+      if (Array.isArray(payload.suppliers) && payload.suppliers.length > 0) {
+        serverState.suppliers = payload.suppliers;
+      }
+      if (Array.isArray(payload.supplierProducts) && payload.supplierProducts.length > 0) {
+        serverState.supplierProducts = payload.supplierProducts;
+      }
+      if (Array.isArray(payload.supplierServices) && payload.supplierServices.length > 0) {
+        serverState.supplierServices = payload.supplierServices;
+      }
+      if (Array.isArray(payload.serviceRequests)) {
+        const reqMap = new Map(serverState.serviceRequests.map(r => [r.id, r]));
+        payload.serviceRequests.forEach((r: any) => { if (r && r.id) reqMap.set(r.id, { ...reqMap.get(r.id), ...r }); });
+        serverState.serviceRequests = Array.from(reqMap.values());
+      }
+      if (Array.isArray(payload.collaborators) && payload.collaborators.length > 0) {
+        serverState.collaborators = payload.collaborators;
+      }
+      if (Array.isArray(payload.collaboratorSales)) {
+        const salesMap = new Map(serverState.collaboratorSales.map(s => [s.id, s]));
+        payload.collaboratorSales.forEach((s: any) => { if (s && s.id) salesMap.set(s.id, { ...salesMap.get(s.id), ...s }); });
+        serverState.collaboratorSales = Array.from(salesMap.values());
+      }
+      if (Array.isArray(payload.notifications)) {
+        const notifMap = new Map(serverState.notifications.map(n => [n.id, n]));
+        payload.notifications.forEach((n: any) => { if (n && n.id) notifMap.set(n.id, { ...notifMap.get(n.id), ...n }); });
+        serverState.notifications = Array.from(notifMap.values());
+      }
+      if (payload.logisticsConfig) {
+        serverState.logisticsConfig = payload.logisticsConfig;
+      }
+      serverState.lastUpdated = Date.now();
+      persistServerState();
+      return res.json({ success: true, lastUpdated: serverState.lastUpdated, data: serverState });
+    } catch (err: any) {
+      console.error('[Sync] Bulk sync error:', err);
+      return res.status(500).json({ error: 'Falha ao sincronizar dados no servidor.' });
+    }
+  });
+
+  // POST create or update an order
+  app.post('/api/sync/order', (req, res) => {
+    try {
+      const order = req.body;
+      if (!order || !order.id) {
+        return res.status(400).json({ error: 'Pedido inválido (ID obrigatório).' });
+      }
+      const existingIdx = serverState.orders.findIndex(o => o.id === order.id);
+      if (existingIdx >= 0) {
+        serverState.orders[existingIdx] = { ...serverState.orders[existingIdx], ...order };
+      } else {
+        serverState.orders.unshift(order);
+      }
+      serverState.lastUpdated = Date.now();
+      persistServerState();
+      console.log(`[Sync] Order synced: ${order.id} (${order.productName || 'Sem nome'}) for client ${order.clientName || order.clientId}`);
+      return res.json({ success: true, order, lastUpdated: serverState.lastUpdated });
+    } catch (err: any) {
+      console.error('[Sync] Order sync error:', err);
+      return res.status(500).json({ error: 'Falha ao sincronizar pedido.' });
+    }
+  });
+
+  // POST create or update a client
+  app.post('/api/sync/client', (req, res) => {
+    try {
+      const client = req.body;
+      if (!client || !client.id) {
+        return res.status(400).json({ error: 'Cliente inválido (ID obrigatório).' });
+      }
+      const existingIdx = serverState.clients.findIndex(c => c.id === client.id);
+      if (existingIdx >= 0) {
+        serverState.clients[existingIdx] = { ...serverState.clients[existingIdx], ...client };
+      } else {
+        serverState.clients.push(client);
+      }
+      serverState.lastUpdated = Date.now();
+      persistServerState();
+      console.log(`[Sync] Client synced: ${client.id} - ${client.name} (${client.phone})`);
+      return res.json({ success: true, client, lastUpdated: serverState.lastUpdated });
+    } catch (err: any) {
+      console.error('[Sync] Client sync error:', err);
+      return res.status(500).json({ error: 'Falha ao sincronizar cliente.' });
+    }
+  });
+
+  // POST append or update a message
+  app.post('/api/sync/message', (req, res) => {
+    try {
+      const message = req.body;
+      if (!message || !message.id) {
+        return res.status(400).json({ error: 'Mensagem inválida (ID obrigatório).' });
+      }
+      const existingIdx = serverState.messages.findIndex(m => m.id === message.id);
+      if (existingIdx >= 0) {
+        serverState.messages[existingIdx] = { ...serverState.messages[existingIdx], ...message };
+      } else {
+        serverState.messages.push(message);
+      }
+      serverState.lastUpdated = Date.now();
+      persistServerState();
+      return res.json({ success: true, message, lastUpdated: serverState.lastUpdated });
+    } catch (err: any) {
+      console.error('[Sync] Message sync error:', err);
+      return res.status(500).json({ error: 'Falha ao sincronizar mensagem.' });
+    }
   });
 
   // 2. Chatbot AI Endpoint with Dynamic Knowledge Base Injection

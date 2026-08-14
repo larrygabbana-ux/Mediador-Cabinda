@@ -1288,17 +1288,18 @@ export function getStoredAuditLogs(): KnowledgeAuditLog[] {
   return INITIAL_AUDIT_LOGS;
 }
 
-export function addAuditLogEntry(entry: Omit<KnowledgeAuditLog, 'id' | 'timestamp'>): void {
+export function addAuditLogEntry(entry: Omit<KnowledgeAuditLog, 'id' | 'timestamp'>): KnowledgeAuditLog {
+  const newLog: KnowledgeAuditLog = {
+    ...entry,
+    id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString()
+  };
   try {
     const current = getStoredAuditLogs();
-    const newLog: KnowledgeAuditLog = {
-      ...entry,
-      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      timestamp: new Date().toISOString()
-    };
     const updated = [newLog, ...current].slice(0, 100); // keep last 100 entries
     localStorage.setItem('mediador_cabinda_knowledge_audit_logs', JSON.stringify(updated));
   } catch {}
+  return newLog;
 }
 
 /**

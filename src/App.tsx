@@ -59,6 +59,8 @@ import {
 import ClientDashboard from './components/ClientDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import AiChatbotModal from './components/AiChatbotModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { fetchServerState, syncOrderToServer, syncClientToServer, syncMessageToServer, syncBulkToServer } from './services/syncService';
 // @ts-ignore
 import appLogoImg from './assets/images/mediador_cabinda_logo_1783098275536.jpg';
 import { 
@@ -434,6 +436,7 @@ export default function App() {
     const updatedList = [...currentList, newClient];
     setClients(updatedList);
     saveClients(updatedList);
+    syncClientToServer(newClient);
     setActiveClientId(newId);
     saveCurrentClientId(newId);
     setIsAdminLoggedIn(false);
@@ -816,20 +819,170 @@ export default function App() {
     }
   };
 
+  // CROSS-DEVICE REAL-TIME SYNCHRONIZATION
+  useEffect(() => {
+    let isMounted = true;
+
+    const performSync = async () => {
+      try {
+        const remote = await fetchServerState();
+        if (!remote || !isMounted) return;
+
+        // 1. Sync Orders across devices
+        if (Array.isArray(remote.orders) && remote.orders.length > 0) {
+          setOrders(prev => {
+            const orderMap = new Map<string, Order>(prev.map(o => [o.id, o]));
+            let changed = false;
+
+            (remote.orders as Order[]).forEach(remOrd => {
+              if (!remOrd || !remOrd.id) return;
+              if (!orderMap.has(remOrd.id)) {
+                changed = true;
+                orderMap.set(remOrd.id, remOrd);
+              } else {
+                const cur = orderMap.get(remOrd.id)!;
+                const curTime = cur.updatedAt || cur.createdAt || '';
+                const remTime = remOrd.updatedAt || remOrd.createdAt || '';
+                if (remTime > curTime || JSON.stringify(cur) !== JSON.stringify(remOrd)) {
+                  changed = true;
+                  orderMap.set(remOrd.id, { ...cur, ...remOrd });
+                }
+              }
+            });
+
+            if (changed) {
+              const merged = Array.from(orderMap.values());
+              saveOrders(merged);
+              return merged;
+            }
+            return prev;
+          });
+        }
+
+        // 2. Sync Clients across devices
+        if (Array.isArray(remote.clients) && remote.clients.length > 0) {
+          setClients(prev => {
+            const clientMap = new Map<string, Client>(prev.map(c => [c.id, c]));
+            let changed = false;
+            (remote.clients as Client[]).forEach(remCli => {
+              if (!remCli || !remCli.id) return;
+              if (!clientMap.has(remCli.id)) {
+                changed = true;
+                clientMap.set(remCli.id, remCli);
+              } else {
+                const cur = clientMap.get(remCli.id)!;
+                if (JSON.stringify(cur) !== JSON.stringify(remCli)) {
+                  changed = true;
+                  clientMap.set(remCli.id, { ...cur, ...remCli });
+                }
+              }
+            });
+            if (changed) {
+              const merged = Array.from(clientMap.values());
+              saveClients(merged);
+              return merged;
+            }
+            return prev;
+          });
+        }
+
+        // 3. Sync Messages across devices
+        if (Array.isArray(remote.messages) && remote.messages.length > 0) {
+          setMessages(prev => {
+            const msgMap = new Map<string, Message>(prev.map(m => [m.id, m]));
+            let changed = false;
+            (remote.messages as Message[]).forEach(remMsg => {
+              if (!remMsg || !remMsg.id) return;
+              if (!msgMap.has(remMsg.id)) {
+                changed = true;
+                msgMap.set(remMsg.id, remMsg);
+              }
+            });
+            if (changed) {
+              const merged = Array.from(msgMap.values());
+              saveMessages(merged);
+              return merged;
+            }
+            return prev;
+          });
+        }
+
+        // 4. Sync Service Requests
+        if (Array.isArray(remote.serviceRequests) && remote.serviceRequests.length > 0) {
+          setServiceRequests(prev => {
+            const reqMap = new Map<string, ServiceRequest>(prev.map(r => [r.id, r]));
+            let changed = false;
+            (remote.serviceRequests as ServiceRequest[]).forEach(remReq => {
+              if (!remReq || !remReq.id) return;
+              if (!reqMap.has(remReq.id)) {
+                changed = true;
+                reqMap.set(remReq.id, remReq);
+              }
+            });
+            if (changed) {
+              const merged = Array.from(reqMap.values());
+              saveServiceRequests(merged);
+              return merged;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        // Silently handle offline/local deviations
+      }
+    };
+
+    // Seed local data to server on startup
+    const seedLocalToServer = async () => {
+      try {
+        const localOrders = getOrders();
+        const localClients = getClients();
+        const localMessages = getMessages();
+        const localRequests = getServiceRequests();
+        await syncBulkToServer({
+          orders: localOrders,
+          clients: localClients,
+          messages: localMessages,
+          serviceRequests: localRequests
+        });
+      } catch {}
+    };
+
+    seedLocalToServer().then(() => performSync());
+
+    // Continuous real-time cross-device poll (every 3 seconds)
+    const pollInterval = setInterval(performSync, 3000);
+
+    // Sync immediately when user switches tabs or focuses phone screen
+    const handleSyncFocus = () => performSync();
+    window.addEventListener('focus', handleSyncFocus);
+    window.addEventListener('visibilitychange', handleSyncFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleSyncFocus);
+      window.removeEventListener('visibilitychange', handleSyncFocus);
+    };
+  }, []);
+
   const handleUpdateOrder = (updatedOrder: Order) => {
     const updatedOrders = orders.map(ord => ord.id === updatedOrder.id ? updatedOrder : ord);
     setOrders(updatedOrders);
     saveOrders(updatedOrders);
+    syncOrderToServer(updatedOrder);
   };
 
   const handleUpdateCollaborators = (newColabs: Collaborator[]) => {
     setCollaborators(newColabs);
     safeLocalStorageSetItem('mediador_cabinda_collaborators', JSON.stringify(newColabs));
+    syncBulkToServer({ collaborators: newColabs });
   };
 
   const handleUpdateCollaboratorSales = (newSales: CollaboratorSale[]) => {
     setCollaboratorSales(newSales);
     safeLocalStorageSetItem('mediador_cabinda_collaborator_sales', JSON.stringify(newSales));
+    syncBulkToServer({ collaboratorSales: newSales });
   };
 
   const handleAddCarrier = (newCarrier: CarrierCompany) => {
@@ -843,6 +996,7 @@ export default function App() {
     const updatedOrders = [newOrder, ...orders];
     setOrders(updatedOrders);
     saveOrders(updatedOrders);
+    syncOrderToServer(newOrder);
 
     // Prompt automatic initial notification
     const addedNotif: Notification = {
@@ -857,6 +1011,7 @@ export default function App() {
     const updatedNotifs = [addedNotif, ...notifications];
     setNotifications(updatedNotifs);
     safeLocalStorageSetItem('mediador_cabinda_notifications', JSON.stringify(updatedNotifs));
+    syncBulkToServer({ notifications: updatedNotifs });
     speakText("Seu pedido foi recebido com sucesso no sistema. Aguarde a cotação comercial.");
   };
 
@@ -864,6 +1019,7 @@ export default function App() {
     const updatedClients = [...clients, newClient];
     setClients(updatedClients);
     saveClients(updatedClients);
+    syncClientToServer(newClient);
     setActiveClientId(newClient.id);
     saveCurrentClientId(newClient.id);
     speakText("Cadastro concluído com sucesso. Sua conta está agora ativa.");
@@ -907,6 +1063,7 @@ export default function App() {
       saveMessages(next);
       return next;
     });
+    syncMessageToServer(newMsg);
 
     // Handle real-time notification alerts
     if (activeSender === 'client') {
@@ -2597,32 +2754,69 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <ClientDashboard
+                <ErrorBoundary fallbackTitle="Erro no Painel do Cliente">
+                  <ClientDashboard
+                    clients={clients}
+                    activeClientId={activeClientId}
+                    onSetClient={handleSetClient}
+                    onAddClient={handleAddClient}
+                    orders={orders}
+                    onAddOrder={handleAddOrder}
+                    onUpdateOrder={handleUpdateOrder}
+                    messages={messages}
+                    onSendMessage={handleSendMessage}
+                    onMarkChannelAsRead={handleMarkChannelAsRead}
+                    notifications={notifications}
+                    onMarkNotificationRead={handleMarkNotificationRead}
+                    currentView={currentView}
+                    setCurrentView={setCurrentView}
+                    fontSize={fontSize}
+                    setFontSize={setFontSize}
+                    highContrast={highContrast}
+                    setHighContrast={setHighContrast}
+                    textToSpeech={textToSpeech}
+                    setTextToSpeech={setTextToSpeech}
+                    homeSearchQuery={homeSearchQuery}
+                    setHomeSearchQuery={setHomeSearchQuery}
+                    carriersList={carriersList}
+                    suppliers={suppliers}
+                    onUpdateSupplier={handleUpdateSupplier}
+                    supplierProducts={supplierProducts}
+                    onUpdateSupplierProduct={handleUpdateSupplierProduct}
+                    onCreateSupplierProduct={handleCreateSupplierProduct}
+                    supplierMessages={supplierMessages}
+                    onSendSupplierMessage={handleSendSupplierMessage}
+                    collaborators={collaborators}
+                    onUpdateCollaborators={handleUpdateCollaborators}
+                    collaboratorSales={collaboratorSales}
+                    onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
+                    supplierServices={supplierServices}
+                    onUpdateSupplierService={handleUpdateSupplierService}
+                    onCreateSupplierService={handleCreateSupplierService}
+                    serviceRequests={serviceRequests}
+                    onCreateServiceRequest={handleCreateServiceRequest}
+                    onUpdateServiceRequest={handleUpdateServiceRequest}
+                    logisticsConfig={logisticsConfig}
+                    knowledgeBase={knowledgeBase}
+                  />
+                </ErrorBoundary>
+              </div>
+            ) : (
+              <ErrorBoundary fallbackTitle="Erro no Painel Administrativo">
+                <AdminDashboard
                   clients={clients}
-                  activeClientId={activeClientId}
-                  onSetClient={handleSetClient}
-                  onAddClient={handleAddClient}
                   orders={orders}
-                  onAddOrder={handleAddOrder}
                   onUpdateOrder={handleUpdateOrder}
                   messages={messages}
                   onSendMessage={handleSendMessage}
                   onMarkChannelAsRead={handleMarkChannelAsRead}
                   notifications={notifications}
-                  onMarkNotificationRead={handleMarkNotificationRead}
-                  currentView={currentView}
-                  setCurrentView={setCurrentView}
-                  fontSize={fontSize}
-                  setFontSize={setFontSize}
-                  highContrast={highContrast}
-                  setHighContrast={setHighContrast}
-                  textToSpeech={textToSpeech}
-                  setTextToSpeech={setTextToSpeech}
-                  homeSearchQuery={homeSearchQuery}
-                  setHomeSearchQuery={setHomeSearchQuery}
+                  onAddNotification={handleAddNotification}
                   carriersList={carriersList}
+                  onAddCarrier={handleAddCarrier}
                   suppliers={suppliers}
                   onUpdateSupplier={handleUpdateSupplier}
+                  onCreateSupplier={handleCreateSupplier}
                   supplierProducts={supplierProducts}
                   onUpdateSupplierProduct={handleUpdateSupplierProduct}
                   onCreateSupplierProduct={handleCreateSupplierProduct}
@@ -2639,50 +2833,17 @@ export default function App() {
                   onCreateServiceRequest={handleCreateServiceRequest}
                   onUpdateServiceRequest={handleUpdateServiceRequest}
                   logisticsConfig={logisticsConfig}
+                  onUpdateLogisticsConfig={handleUpdateLogisticsConfig}
                   knowledgeBase={knowledgeBase}
+                  onUpdateKnowledgeItem={handleUpdateKnowledgeItem}
+                  onCreateKnowledgeItem={handleCreateKnowledgeItem}
+                  onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
+                  auditLogs={auditLogs}
+                  onResetKnowledgeBaseToDefaults={handleResetKnowledgeBaseToDefaults}
+                  onChangeRole={setRole}
+                  onChangeView={setCurrentView}
                 />
-              </div>
-            ) : (
-              <AdminDashboard
-                clients={clients}
-                orders={orders}
-                onUpdateOrder={handleUpdateOrder}
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                onMarkChannelAsRead={handleMarkChannelAsRead}
-                notifications={notifications}
-                onAddNotification={handleAddNotification}
-                carriersList={carriersList}
-                onAddCarrier={handleAddCarrier}
-                suppliers={suppliers}
-                onUpdateSupplier={handleUpdateSupplier}
-                onCreateSupplier={handleCreateSupplier}
-                supplierProducts={supplierProducts}
-                onUpdateSupplierProduct={handleUpdateSupplierProduct}
-                onCreateSupplierProduct={handleCreateSupplierProduct}
-                supplierMessages={supplierMessages}
-                onSendSupplierMessage={handleSendSupplierMessage}
-                collaborators={collaborators}
-                onUpdateCollaborators={handleUpdateCollaborators}
-                collaboratorSales={collaboratorSales}
-                onUpdateCollaboratorSales={handleUpdateCollaboratorSales}
-                supplierServices={supplierServices}
-                onUpdateSupplierService={handleUpdateSupplierService}
-                onCreateSupplierService={handleCreateSupplierService}
-                serviceRequests={serviceRequests}
-                onCreateServiceRequest={handleCreateServiceRequest}
-                onUpdateServiceRequest={handleUpdateServiceRequest}
-                logisticsConfig={logisticsConfig}
-                onUpdateLogisticsConfig={handleUpdateLogisticsConfig}
-                knowledgeBase={knowledgeBase}
-                onUpdateKnowledgeItem={handleUpdateKnowledgeItem}
-                onCreateKnowledgeItem={handleCreateKnowledgeItem}
-                onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
-                auditLogs={auditLogs}
-                onResetKnowledgeBaseToDefaults={handleResetKnowledgeBaseToDefaults}
-                onChangeRole={setRole}
-                onChangeView={setCurrentView}
-              />
+              </ErrorBoundary>
             )}
           </main>
         </div>

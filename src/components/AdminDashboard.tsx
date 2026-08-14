@@ -25,6 +25,7 @@ import {
   LogisticsModeConfig
 } from '../types';
 import { CARRIER_COMPANIES, MASTER_ADMIN_CREDENTIALS, wipeAllStoredData } from '../data/mockData';
+import { ErrorBoundary } from './ErrorBoundary';
 import { 
   BarChart, 
   Users, 
@@ -1569,11 +1570,16 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                 {matched.map((prod) => {
                   const code = getProductCode(prod);
                   const sup = suppliers.find(s => s.id === prod.supplierId);
-                  const linkedOrders = orders.filter(o => 
-                    (o.productCode && o.productCode.toUpperCase() === code.toUpperCase()) ||
-                    o.productName.toLowerCase().includes(prod.name.toLowerCase()) ||
-                    (o.notes && o.notes.includes(code))
-                  );
+                  const linkedOrders = orders.filter(o => {
+                    const oCode = (o.productCode || '').toUpperCase();
+                    const oName = (o.productName || '').toLowerCase();
+                    const pName = (prod.name || '').toLowerCase();
+                    return (
+                      (oCode && oCode === code.toUpperCase()) ||
+                      (oName && pName && oName.includes(pName)) ||
+                      (o.notes && o.notes.includes(code))
+                    );
+                  });
 
                   const sellerPhone = sup?.phoneHidden || sup?.whatsapp || '+244 923 000 000';
                   const cleanPhone = sellerPhone.replace(/\D/g, '');
@@ -2265,11 +2271,17 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                     
                     {/* Product & Catalog Reference with Image */}
                     {(() => {
-                      const matchedProd = supplierProducts.find(p => 
-                        (activeOrder.productCode && getProductCode(p).toUpperCase() === activeOrder.productCode.toUpperCase()) ||
-                        p.name.toLowerCase().includes(activeOrder.productName.toLowerCase()) ||
-                        activeOrder.productName.toLowerCase().includes(p.name.toLowerCase())
-                      );
+                      const matchedProd = supplierProducts.find(p => {
+                        const pCode = getProductCode(p).toUpperCase();
+                        const ordCode = (activeOrder.productCode || '').toUpperCase();
+                        const pName = (p.name || '').toLowerCase();
+                        const ordName = (activeOrder.productName || '').toLowerCase();
+                        return (
+                          (ordCode && pCode === ordCode) ||
+                          (ordName && pName && pName.includes(ordName)) ||
+                          (ordName && pName && ordName.includes(pName))
+                        );
+                      });
 
                       return (
                         <div className="mt-2 flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
@@ -2409,7 +2421,15 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                   <div className="flex items-center justify-between mb-3.5">
                     <span className="text-[10px] uppercase font-bold text-slate-400 font-sans tracking-wider">Passo-a-Passo da Evolução de Transporte</span>
                     <span className="text-[10px] font-bold text-sky-750 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
-                      Etapa {getCurrentStatusIndex(activeOrder.status, activeOrder) + 1} de 9: <span className="uppercase font-extrabold">{getTrackingSteps(activeOrder)[getCurrentStatusIndex(activeOrder.status, activeOrder)]?.title.split('. ')[1] || 'Registado'}</span>
+                      {(() => {
+                        const curIdx = Math.max(0, getCurrentStatusIndex(activeOrder.status, activeOrder));
+                        const stepObj = getTrackingSteps(activeOrder)[curIdx];
+                        const stepTitle = stepObj?.title || 'Registado';
+                        const displayTitle = stepTitle.includes('. ') ? stepTitle.split('. ')[1] : stepTitle;
+                        return (
+                          <>Etapa {curIdx + 1} de 9: <span className="uppercase font-extrabold">{displayTitle}</span></>
+                        );
+                      })()}
                     </span>
                   </div>
                   
@@ -2443,7 +2463,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                           <span className={`text-[8px] font-extrabold text-center mt-1.5 uppercase transition-colors tracking-tighter ${
                             isCurrent ? 'text-amber-550 font-black' : isDone ? 'text-slate-700' : 'text-slate-400'
                           }`}>
-                            {step.title.split('. ')[1]}
+                            {step.title && step.title.includes('. ') ? step.title.split('. ')[1] : (step.title || 'Etapa')}
                           </span>
                         </div>
                       );
@@ -2817,11 +2837,11 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
           const q = clientSearchQuery.toLowerCase().trim();
           if (!q) return true;
           return (
-            c.name.toLowerCase().includes(q) ||
-            c.id.toLowerCase().includes(q) ||
-            c.nif.toLowerCase().includes(q) ||
-            c.phone.toLowerCase().includes(q) ||
-            c.email.toLowerCase().includes(q) ||
+            (c.name || '').toLowerCase().includes(q) ||
+            (c.id || '').toLowerCase().includes(q) ||
+            (c.nif || '').toLowerCase().includes(q) ||
+            (c.phone || '').toLowerCase().includes(q) ||
+            (c.email || '').toLowerCase().includes(q) ||
             (c.municipality && c.municipality.toLowerCase().includes(q)) ||
             (c.province && c.province.toLowerCase().includes(q))
           );
@@ -3695,11 +3715,16 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                     <div className="space-y-3">
                                       {matched.map(prod => {
                                         const code = getProductCode(prod);
-                                        const linkedOrders = orders.filter(o => 
-                                          (o.productCode && o.productCode.toUpperCase() === code.toUpperCase()) ||
-                                          o.productName.toLowerCase().includes(prod.name.toLowerCase()) ||
-                                          (o.notes && o.notes.includes(code))
-                                        );
+                                        const linkedOrders = orders.filter(o => {
+                                          const oCode = (o.productCode || '').toUpperCase();
+                                          const oName = (o.productName || '').toLowerCase();
+                                          const pName = (prod.name || '').toLowerCase();
+                                          return (
+                                            (oCode && oCode === code.toUpperCase()) ||
+                                            (oName && pName && oName.includes(pName)) ||
+                                            (o.notes && o.notes.includes(code))
+                                          );
+                                        });
                                         const prodSup = suppliers.find(s => s.id === prod.supplierId);
 
                                         return (
@@ -8237,6 +8262,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                     <option value="Automóvel e Peças">Automóvel e Peças</option>
                     <option value="Alimentação e Bebidas">Alimentação e Bebidas</option>
                     <option value="Comércio Geral e Importação">Comércio Geral e Importação</option>
+                    <option value="Diversos">Diversos (Casa, Decoração, Utilidades & Outros)</option>
                   </select>
                 </div>
 
