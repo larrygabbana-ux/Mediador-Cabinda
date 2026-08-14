@@ -350,19 +350,19 @@ export const DEFAULT_SUPPLIER_SERVICES: SupplierService[] = [
 
 export const DEFAULT_SERVICE_REQUESTS: ServiceRequest[] = [];
 
-// Master Administrator Credentials (João Hilário António)
+// Master Administrator Credentials (Direção Geral - Mediador Cabinda)
 export const MASTER_ADMIN_CREDENTIALS = {
   username: 'admin',
-  email: 'hilariogime0@gmail.com',
-  name: 'João Hilário António',
+  email: 'direcao@mediadorcabinda.ao',
+  name: 'Direção Geral - Mediador Cabinda',
   phone: '942043293',
   whatsapp: '942043293',
   address: 'Bairro Cabassango, Município de Liambo, Cabinda',
   province: 'Cabinda',
   municipality: 'Liambo',
-  // Ultra-secure master passphrase
-  passphrase: 'MC#Admin@Cabinda-Luanda_2026!MasterShield$998877',
-  pin: '998877'
+  // Ultra-secure, long, high-entropy master password
+  passphrase: 'MC#Cabinda2026!DirecaoGeral$MasterKey9942@ProtegidoAO',
+  pin: '942043'
 };
 
 const STORAGE_KEYS = {
@@ -381,20 +381,22 @@ const STORAGE_KEYS = {
 export function initializeStorage() {
   if (typeof window === 'undefined') return;
 
-  const SCHEMA_VER = 'v2026_08_14_joao_hilario_clean_v10';
+  const SCHEMA_VER = 'v2026_08_14_joao_hilario_clean_v11';
   const currentVer = localStorage.getItem('mediador_cabinda_schema_ver');
 
-  // Enforce master admin details for João Hilário António
-  const defaultAdmin = {
+  // Enforce master admin details for Direção Geral
+  const defaultAdmin: AdminMasterAccount = {
     id: 'admin-master',
-    name: 'João Hilário António',
-    email: 'hilariogime0@gmail.com',
+    name: 'Direção Geral - Mediador Cabinda',
+    email: 'direcao@mediadorcabinda.ao',
     phone: '942043293',
     whatsapp: '942043293',
     address: 'Bairro Cabassango, Município de Liambo, Cabinda',
     province: 'Cabinda',
     municipality: 'Liambo',
-    role: 'Administrador Master / Proprietário',
+    role: 'Administrador Master / Direção Geral',
+    password: 'MC#Cabinda2026!DirecaoGeral$MasterKey9942@ProtegidoAO',
+    pin: '942043',
     createdAt: '2026-01-01T00:00:00Z'
   };
 
@@ -431,13 +433,16 @@ export function initializeStorage() {
 export function getMasterAdminAccount(): AdminMasterAccount {
   const defaultAdmin: AdminMasterAccount = {
     id: 'admin-master',
-    name: 'João Hilário António',
-    email: 'hilariogime0@gmail.com',
+    name: 'Direção Geral - Mediador Cabinda',
+    email: 'direcao@mediadorcabinda.ao',
     phone: '942043293',
+    whatsapp: '942043293',
     address: 'Bairro Cabassango, Município de Liambo, Cabinda',
     province: 'Cabinda',
     municipality: 'Liambo',
-    role: 'Administrador Master / Proprietário',
+    role: 'Administrador Master / Direção Geral',
+    password: 'MC#Cabinda2026!DirecaoGeral$MasterKey9942@ProtegidoAO',
+    pin: '942043',
     createdAt: '2026-01-01T00:00:00Z'
   };
   if (typeof window === 'undefined') return defaultAdmin;
@@ -445,7 +450,19 @@ export function getMasterAdminAccount(): AdminMasterAccount {
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.name) return parsed;
+      if (parsed && parsed.name) {
+        // Guarantee strong password and official email if missing or basic
+        if (!parsed.password || parsed.password === 'admin99' || parsed.password === 'admin') {
+          parsed.password = 'MC#Cabinda2026!DirecaoGeral$MasterKey9942@ProtegidoAO';
+        }
+        if (!parsed.email || parsed.email.includes('gmail.com')) {
+          parsed.email = 'direcao@mediadorcabinda.ao';
+        }
+        if (!parsed.pin) {
+          parsed.pin = '942043';
+        }
+        return parsed;
+      }
     } catch {}
   }
   localStorage.setItem(STORAGE_KEYS.MASTER_ADMIN, JSON.stringify(defaultAdmin));

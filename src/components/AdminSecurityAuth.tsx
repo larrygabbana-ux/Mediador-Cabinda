@@ -33,7 +33,7 @@ import {
   Info
 } from 'lucide-react';
 import { Collaborator, AdminMasterAccount } from '../types';
-import { getMasterAdminAccount, saveMasterAdminAccount, wipeAllStoredData } from '../data/mockData';
+import { getMasterAdminAccount, saveMasterAdminAccount, wipeAllStoredData, MASTER_ADMIN_CREDENTIALS } from '../data/mockData';
 
 export type AuthMethodType = 'pin' | 'biometric' | 'otp_whatsapp' | 'otp_email' | 'otp_call' | 'setup_account';
 
@@ -65,11 +65,11 @@ export default function AdminSecurityAuth({
   });
 
   // Setup Form States (for creating new Master Admin credentials)
-  const [setupName, setSetupName] = useState(masterAdmin?.name || 'Larry Gabbana (Diretor Geral)');
-  const [setupEmail, setSetupEmail] = useState(masterAdmin?.email || 'larrygabbana@gmail.com');
+  const [setupName, setSetupName] = useState(masterAdmin?.name || 'Direção Geral - Mediador Cabinda');
+  const [setupEmail, setSetupEmail] = useState(masterAdmin?.email || 'direcao@mediadorcabinda.ao');
   const [setupPhone, setSetupPhone] = useState(masterAdmin?.phone || '+244 942 043 293');
-  const [setupPassword, setSetupPassword] = useState(masterAdmin?.password || '');
-  const [setupPin, setSetupPin] = useState(masterAdmin?.pin || '');
+  const [setupPassword, setSetupPassword] = useState(masterAdmin?.password || MASTER_ADMIN_CREDENTIALS.passphrase);
+  const [setupPin, setSetupPin] = useState(masterAdmin?.pin || '942043');
   const [showSetupPassword, setShowSetupPassword] = useState(false);
   const [showSetupPin, setShowSetupPin] = useState(false);
   const [enrollBiometricsInSetup, setEnrollBiometricsInSetup] = useState(true);
@@ -79,6 +79,8 @@ export default function AdminSecurityAuth({
   const [showPinOrPass, setShowPinOrPass] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [copiedMasterKey, setCopiedMasterKey] = useState(false);
+  const [copiedMasterEmail, setCopiedMasterEmail] = useState(false);
 
   // Biometric States
   const [isScanning, setIsScanning] = useState(false);
@@ -127,7 +129,7 @@ export default function AdminSecurityAuth({
     setErrorMsg('');
 
     const targetPhone = masterAdmin?.phone || '+244 942 043 293';
-    const targetEmail = masterAdmin?.email || 'larrygabbana@gmail.com';
+    const targetEmail = masterAdmin?.email || 'direcao@mediadorcabinda.ao';
 
     if (channel === 'whatsapp') {
       setSuccessMsg(`Código de 6 dígitos gerado com sucesso. Clique no botão abaixo para enviar para o WhatsApp (${targetPhone}).`);
@@ -294,7 +296,25 @@ export default function AdminSecurityAuth({
 
     const cleanedLower = input.toLowerCase();
 
-    // 1. Check against configured Master Admin account
+    // 1. Check against configured Master Admin account & Master Credentials
+    const isMasterPassphrase = input === MASTER_ADMIN_CREDENTIALS.passphrase || input.trim() === MASTER_ADMIN_CREDENTIALS.passphrase;
+    const isMasterPin = input === MASTER_ADMIN_CREDENTIALS.pin || input.trim() === '942043';
+    const isMasterDomainEmail = 
+      cleanedLower === 'direcao@mediadorcabinda.ao' || 
+      cleanedLower === 'gestao@mediadorcabinda.ao' || 
+      cleanedLower === 'admin@mediadorcabinda.ao' ||
+      cleanedLower === 'larrygabbana@gmail.com' ||
+      cleanedLower === 'hilariogime0@gmail.com';
+
+    if (isMasterPassphrase || isMasterPin) {
+      setSuccessMsg(`✅ Acesso autorizado para a Direção Geral (Mediador Cabinda)!`);
+      speakVoice(`Acesso de administração autorizado. Bem-vindo à Direção Geral.`);
+      setTimeout(() => {
+        onSuccess();
+      }, 500);
+      return;
+    }
+
     if (masterAdmin) {
       const matchPin = input === masterAdmin.pin;
       const matchPass = input === masterAdmin.password;
@@ -608,7 +628,79 @@ export default function AdminSecurityAuth({
       {/* ========================================================================= */}
       {activeMethod === 'pin' && (
         <form onSubmit={handleValidatePinOrPassword} className="space-y-4 animate-fade-in bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="space-y-1.5">
+          {/* Security Credentials Showcase Banner */}
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 text-left space-y-3 text-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span className="text-[11px] font-black text-amber-300 uppercase tracking-wider">
+                  Credenciais Oficiais da Direção Geral
+                </span>
+              </div>
+              <span className="text-[9.5px] font-mono font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-md border border-amber-400/30">
+                Alta Segurança • 53 Caracteres
+              </span>
+            </div>
+
+            {/* Official Email */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400 font-bold uppercase tracking-wider">E-mail Corporativo:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(masterAdmin?.email || MASTER_ADMIN_CREDENTIALS.email);
+                    setCopiedMasterEmail(true);
+                    setTimeout(() => setCopiedMasterEmail(false), 2000);
+                  }}
+                  className="text-amber-400 hover:text-amber-300 font-bold cursor-pointer flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{copiedMasterEmail ? 'Copiado!' : 'Copiar E-mail'}</span>
+                </button>
+              </div>
+              <div className="font-mono text-xs font-bold text-slate-200 bg-black/40 p-2 rounded-xl border border-white/5 flex items-center justify-between">
+                <span>{masterAdmin?.email || MASTER_ADMIN_CREDENTIALS.email}</span>
+                <span className="text-[9.5px] text-slate-500 font-sans">Mediador Cabinda</span>
+              </div>
+            </div>
+
+            {/* Master Long Password */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400 font-bold uppercase tracking-wider">Palavra-passe Mestra (Inviolável):</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(MASTER_ADMIN_CREDENTIALS.passphrase);
+                      setCopiedMasterKey(true);
+                      setTimeout(() => setCopiedMasterKey(false), 2000);
+                    }}
+                    className="text-amber-400 hover:text-amber-300 font-bold cursor-pointer flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedMasterKey ? 'Copiada!' : 'Copiar Palavra-passe'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPinOrPassInput(MASTER_ADMIN_CREDENTIALS.passphrase);
+                      setErrorMsg('');
+                    }}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-2 py-0.5 rounded-md font-black text-[10px] cursor-pointer transition-all active:scale-95"
+                  >
+                    Auto-Inserir
+                  </button>
+                </div>
+              </div>
+              <div className="font-mono text-[11px] font-bold text-amber-300 bg-black/50 p-2.5 rounded-xl border border-amber-400/20 break-all select-all leading-tight">
+                {MASTER_ADMIN_CREDENTIALS.passphrase}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 text-left">
             <div className="flex items-center justify-between">
               <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                 Código PIN (6 dígitos) ou Senha Mestra *
@@ -629,7 +721,7 @@ export default function AdminSecurityAuth({
                   setPinOrPassInput(e.target.value);
                   setErrorMsg('');
                 }}
-                placeholder={masterAdmin ? "Introduza o seu PIN Secreto ou Senha Mestra" : "Introduza o PIN (ex: admin99)"}
+                placeholder="Cole a Senha Mestra ou digite o PIN (ex: 942043)"
                 className="w-full pl-9 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-black focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900 tracking-wider"
               />
               <button
@@ -654,7 +746,7 @@ export default function AdminSecurityAuth({
           </div>
 
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Deseja alterar a senha da Direção?</span>
+            <span>Deseja personalizar a sua senha?</span>
             <button
               type="button"
               onClick={() => {
@@ -1101,7 +1193,7 @@ export default function AdminSecurityAuth({
                   required
                   value={setupName}
                   onChange={(e) => setSetupName(e.target.value)}
-                  placeholder="Ex: Larry Gabbana (Diretor Geral)"
+                  placeholder="Ex: Direção Geral (Mediador Cabinda)"
                   className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
                 />
               </div>
@@ -1115,7 +1207,7 @@ export default function AdminSecurityAuth({
                   required
                   value={setupEmail}
                   onChange={(e) => setSetupEmail(e.target.value)}
-                  placeholder="Ex: larrygabbana@gmail.com"
+                  placeholder="Ex: direcao@mediadorcabinda.ao"
                   className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
                 />
               </div>
