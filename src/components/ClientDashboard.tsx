@@ -228,6 +228,8 @@ export default function ClientDashboard({
   const [serviceReqDesc, setServiceReqDesc] = useState('');
   const [serviceReqLocation, setServiceReqLocation] = useState('');
   const [serviceReqPhone, setServiceReqPhone] = useState('');
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<string>('todos');
+  const [serviceSearchQuery, setServiceSearchQuery] = useState<string>('');
 
   // Custom visual overlay dialog states to prevent native cut-off clippings
   const [customDialog, setCustomDialog] = useState<{ title: string; message: string; type: 'success' | 'info' | 'warning' } | null>(null);
@@ -243,8 +245,8 @@ export default function ClientDashboard({
     email: '',
     password: '',
     confirmPassword: '',
-    province: 'Cabinda',
-    municipality: 'Cabinda (Sede)',
+    province: '',
+    municipality: '',
     bairro: '',
     rua: '',
     nif: ''
@@ -261,8 +263,8 @@ export default function ClientDashboard({
     phone: clients.find(c => c.id === activeClientId)?.phone || '',
     email: clients.find(c => c.id === activeClientId)?.email || '',
     address: clients.find(c => c.id === activeClientId)?.address || '',
-    province: clients.find(c => c.id === activeClientId)?.province || 'Cabinda',
-    municipality: clients.find(c => c.id === activeClientId)?.municipality || 'Cabinda (Sede)',
+    province: clients.find(c => c.id === activeClientId)?.province || '',
+    municipality: clients.find(c => c.id === activeClientId)?.municipality || '',
     password: '••••••••',
     confirmPassword: '••••••••'
   });
@@ -333,6 +335,61 @@ export default function ClientDashboard({
     location?: string;
     availableFromDate?: string;
   } | null>(null);
+
+  // Client Edit Order & Route Modal State
+  const [isClientEditModalOpen, setIsClientEditModalOpen] = useState(false);
+  const [clientEditForm, setClientEditForm] = useState<{
+    productName: string;
+    quantity: number;
+    routeDirection: 'Luanda-Cabinda' | 'Cabinda-Luanda';
+    originLocation: string;
+    destinationLocation: string;
+    notes: string;
+  }>({
+    productName: '',
+    quantity: 1,
+    routeDirection: 'Luanda-Cabinda',
+    originLocation: '',
+    destinationLocation: '',
+    notes: ''
+  });
+
+  const handleOpenClientEditModal = () => {
+    if (!activeOrder) return;
+    setClientEditForm({
+      productName: activeOrder.productName || '',
+      quantity: activeOrder.quantity || 1,
+      routeDirection: activeOrder.routeDirection || 'Luanda-Cabinda',
+      originLocation: activeOrder.originLocation || activeOrder.supplierLocation || '',
+      destinationLocation: activeOrder.destinationLocation || activeOrder.deliveryAddress || '',
+      notes: activeOrder.notes || ''
+    });
+    setIsClientEditModalOpen(true);
+  };
+
+  const handleSaveClientEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeOrder) return;
+
+    const updated: Order = {
+      ...activeOrder,
+      productName: clientEditForm.productName,
+      quantity: Number(clientEditForm.quantity) || 1,
+      routeDirection: clientEditForm.routeDirection,
+      originLocation: clientEditForm.originLocation,
+      destinationLocation: clientEditForm.destinationLocation,
+      notes: clientEditForm.notes
+    };
+
+    onUpdateOrder(updated);
+    setIsClientEditModalOpen(false);
+
+    showModalAlert(
+      'Pedido e Rota Corrigidos com Sucesso',
+      `As alterações ao pedido ID #${activeOrder.id} foram gravadas!\n\n• Nova Rota: ${clientEditForm.routeDirection === 'Cabinda-Luanda' ? 'Cabinda ➔ Luanda' : 'Luanda ➔ Cabinda'}\n• Produto: ${clientEditForm.productName}\n• Quantidade: ${clientEditForm.quantity}\n\nA nossa equipa logística já foi informada deste ajuste de rota em tempo real.`,
+      'success'
+    );
+  };
 
   // Product Code Getter Helper
   const getProductCode = (prod: SupplierProduct) => {
@@ -637,14 +694,16 @@ export default function ClientDashboard({
     }
 
     const newId = `cli-${Date.now()}`;
+    const finalProv = signupForm.province.trim() || 'Cabinda';
+    const finalMunic = signupForm.municipality.trim() || 'Cabinda';
     const newClient: Client = {
       id: newId,
       name: signupForm.name,
       phone: signupForm.phone,
       email: signupForm.email || `${signupForm.name.toLowerCase().replace(/\s+/g, '')}@mediador.com`,
-      address: `${signupForm.rua}, Bairro ${signupForm.bairro}`,
-      province: signupForm.province,
-      municipality: signupForm.municipality,
+      address: `${signupForm.rua || 'Sede'}, Bairro ${signupForm.bairro || 'Central'}`,
+      province: finalProv,
+      municipality: finalMunic,
       nif: signupForm.nif || `AO-${Math.floor(100000 + Math.random() * 900000)}`,
       points: 200, //Gift initial Standard Welcome loyalty points
       tier: 'Standard'
@@ -663,8 +722,8 @@ export default function ClientDashboard({
         email: '',
         password: '',
         confirmPassword: '',
-        province: 'Cabinda',
-        municipality: 'Cabinda (Sede)',
+        province: '',
+        municipality: '',
         bairro: '',
         rua: '',
         nif: ''
@@ -975,7 +1034,7 @@ export default function ClientDashboard({
               {profilePicture ? (
                 <img src={profilePicture} className="w-full h-full object-cover" alt="Foto" referrerPolicy="no-referrer" />
               ) : (
-                <span className="text-[10px] font-bold text-slate-600">{client.name.substring(0, 2).toUpperCase()}</span>
+                <span className="text-[10px] font-bold text-slate-600">{(client?.name || 'MC').substring(0, 2).toUpperCase()}</span>
               )}
             </button>
           </div>
@@ -1018,7 +1077,7 @@ export default function ClientDashboard({
               {[
                 { id: 'inicio', label: 'Ver Catálogo Mediador', icon: ShoppingBag, desc: 'Lista de produtos homologados', highlight: currentView === 'inicio' },
                 { id: 'fazer-pedido', label: 'Pedir Nova Intermediação', icon: PlusCircle, desc: 'Solicitar compra em Luanda', highlight: currentView === 'fazer-pedido' },
-                { id: 'solicitar-servico', label: 'Solicitar Serviço 🛠️', icon: Wrench, desc: 'Pedir serviço de serralharia', highlight: currentView === 'solicitar-servico' },
+                { id: 'solicitar-servico', label: 'Consultar Serviços 🛠️', icon: Wrench, desc: 'Terrenos, Casas, Carros & Serralharia', highlight: currentView === 'solicitar-servico' },
                 { id: 'acompanhar-pedido', label: 'Acompanhar Meus Pedidos', icon: Truck, desc: 'Ver estado de rotas e guias', highlight: currentView === 'acompanhar-pedido' },
                 { id: 'mensagens', label: 'Central de Apoio & Chats', icon: MessageSquare, desc: 'Conversar com os mediadores', highlight: currentView === 'mensagens' },
                 { id: 'historico', label: 'Histórico de Cargas', icon: Clock, desc: 'Precedentes e faturas pagas', highlight: currentView === 'historico' },
@@ -1087,11 +1146,11 @@ export default function ClientDashboard({
             <div className="p-4 bg-slate-900 text-white border-t border-slate-800 flex items-center justify-between gap-2.5">
               <div className="flex items-center gap-2 overflow-hidden">
                 <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0 select-none">
-                  {client.name.substring(0, 2).toUpperCase()}
+                  {(client?.name || 'MC').substring(0, 2).toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-[11px] font-extrabold truncate text-white leading-tight">{client.name}</p>
-                  <p className="text-[9px] text-slate-405 truncate">{client.phone}</p>
+                  <p className="text-[11px] font-extrabold truncate text-white leading-tight">{client?.name || 'Cliente'}</p>
+                  <p className="text-[9px] text-slate-405 truncate">{client?.phone || ''}</p>
                 </div>
               </div>
               <button
@@ -2463,12 +2522,20 @@ export default function ClientDashboard({
                       </p>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right flex flex-col items-end">
                       <p className="text-[9px] text-slate-400 font-bold uppercase">Custo Total Intermediação</p>
                       <p className="text-base font-extrabold text-slate-900">{formatCurrency(activeOrder.totalAmount || getEstimatedFreight())}</p>
                       <span className="text-[10px] font-bold text-amber-600 block mt-0.5">
                         {activeOrder.paid ? '✅ Pagamento Validado' : '⏳ Aguardando Orçamento'}
                       </span>
+                      <button
+                        type="button"
+                        onClick={handleOpenClientEditModal}
+                        className="mt-2 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-amber-400 text-[10px] font-black uppercase rounded-lg border border-slate-700 transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                        title="Corrigir ou alterar produto, quantidade ou rota do pedido"
+                      >
+                        ✏️ Editar / Corrigir Pedido
+                      </button>
                     </div>
                   </div>
 
@@ -2591,20 +2658,39 @@ export default function ClientDashboard({
                         const sIdx = statusSteps.indexOf(activeOrder.status);
                         const progressFraction = sIdx === -1 ? 0 : sIdx / (statusSteps.length - 1);
                         
-                        // We trace physical points along the Angolan Atlantic coastline to Cabinda
-                        // Bottom (Y=240, X=160) - Luanda
-                        // Middle curve (Y=130, X=90) - Atlantic transit offshore
-                        // Top (Y=30, X=110) - Cabinda exclave
-                        const p0 = { x: 160, y: 220 };
-                        const p1 = { x: 60, y: 125 };
-                        const p2 = { x: 110, y: 30 };
+                        const isCabindaToLuanda = 
+                          activeOrder.routeDirection === 'Cabinda-Luanda' ||
+                          (activeOrder.originCity || '').toLowerCase().includes('cabinda') ||
+                          (activeOrder.originLocation || '').toLowerCase().includes('cabinda') ||
+                          (activeOrder.supplierLocation || '').toLowerCase().includes('cabinda');
+
+                        const originCity = activeOrder.originCity || (isCabindaToLuanda ? 'Cabinda' : 'Luanda');
+                        const destinationCity = activeOrder.destinationCity || (isCabindaToLuanda ? 'Luanda' : 'Cabinda');
+
+                        // Physical coordinates along the Angolan Atlantic coastline
+                        // Luanda (bottom): { x: 160, y: 220 }
+                        // Offshore transit curve: { x: 60, y: 125 }
+                        // Cabinda exclave (top): { x: 110, y: 30 }
+                        const luandaPoint = { x: 160, y: 220 };
+                        const offshorePoint = { x: 60, y: 125 };
+                        const cabindaPoint = { x: 110, y: 30 };
+
+                        const p0 = isCabindaToLuanda ? cabindaPoint : luandaPoint;
+                        const p1 = offshorePoint;
+                        const p2 = isCabindaToLuanda ? luandaPoint : cabindaPoint;
+
                         const t = progressFraction;
                         const vesselX = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x;
                         const vesselY = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y;
 
-                        const isAirCarrier = activeOrder.shippingCarrier?.toLowerCase().includes('aér') || 
-                                              activeOrder.shippingCarrier?.toLowerCase().includes('voo') ||
-                                              activeOrder.shippingCarrier?.toLowerCase().includes('air');
+                        const mode = activeOrder.transportMode || 'maritimo';
+                        const carrierLower = (activeOrder.shippingCarrier || '').toLowerCase();
+                        const isAirCarrier = mode === 'aereo' || carrierLower.includes('aér') || carrierLower.includes('voo') || carrierLower.includes('air') || carrierLower.includes('taag');
+                        const isLandCarrier = mode === 'terrestre' || carrierLower.includes('terrestre') || carrierLower.includes('carro') || carrierLower.includes('caminhão') || carrierLower.includes('rodov');
+
+                        const vehicleIcon = isAirCarrier ? '✈️' : isLandCarrier ? '🚛' : '🚢';
+                        const vectorText = isAirCarrier ? 'Aéreo Express' : isLandCarrier ? 'Terrestre Rodoviário' : 'Marítimo Seguro';
+                        const modeText = isAirCarrier ? 'AÉREO' : isLandCarrier ? 'TERRESTRE' : 'MARÍTIMO';
 
                         return (
                           <div className="bg-slate-900 border border-slate-950 rounded-3xl p-5 text-white/90 relative overflow-hidden shadow-sm" id="coastal-transit-map">
@@ -2639,33 +2725,37 @@ export default function ClientDashboard({
                                     />
                                   )}
 
-                                  {/* Start Node: Luanda */}
-                                  <g transform={`translate(${p0.x}, ${p0.y})`}>
-                                    <circle r="6" className="fill-blue-500/30 animate-pulse" />
-                                    <circle r="3.5" className="fill-blue-500 stroke-slate-950 stroke-2" />
-                                    <text x="10" y="3" className="fill-slate-300 font-sans font-black text-[8px] select-none">LUANDA (Hub)</text>
+                                  {/* Top Node (Cabinda): Position at (110, 30) */}
+                                  <g transform={`translate(${cabindaPoint.x}, ${cabindaPoint.y})`}>
+                                    <circle r="6" className={`${isCabindaToLuanda ? 'fill-blue-500/30' : 'fill-amber-500/30'} animate-pulse`} />
+                                    <circle r="3.5" className={`${isCabindaToLuanda ? 'fill-blue-500' : 'fill-amber-400'} stroke-slate-950 stroke-2`} />
+                                    <text x="10" y="3" className={`${isCabindaToLuanda ? 'fill-slate-300' : 'fill-amber-400'} font-sans font-black text-[8px] select-none tracking-wide`}>
+                                      CABINDA {isCabindaToLuanda ? '(Origem)' : '(Destino)'}
+                                    </text>
                                   </g>
 
-                                  {/* End Node: Cabinda exclave */}
-                                  <g transform={`translate(${p2.x}, ${p2.y})`}>
-                                    <circle r="6" className="fill-amber-500/30 animate-pulse" />
-                                    <circle r="3.5" className="fill-amber-400 stroke-slate-950 stroke-2" />
-                                    <text x="10" y="3" className="fill-amber-400 font-sans font-black text-[8px] select-none tracking-wide">CABINDA (Destino)</text>
+                                  {/* Bottom Node (Luanda): Position at (160, 220) */}
+                                  <g transform={`translate(${luandaPoint.x}, ${luandaPoint.y})`}>
+                                    <circle r="6" className={`${!isCabindaToLuanda ? 'fill-blue-500/30' : 'fill-amber-500/30'} animate-pulse`} />
+                                    <circle r="3.5" className={`${!isCabindaToLuanda ? 'fill-blue-500' : 'fill-amber-400'} stroke-slate-950 stroke-2`} />
+                                    <text x="10" y="3" className={`${!isCabindaToLuanda ? 'fill-slate-300' : 'fill-amber-400'} font-sans font-black text-[8px] select-none tracking-wide`}>
+                                      LUANDA {!isCabindaToLuanda ? '(Origem)' : '(Destino)'}
+                                    </text>
                                   </g>
 
-                                  {/* Moving cargo vessel/airplane indicator according to transport status */}
+                                  {/* Moving cargo vessel/airplane/truck indicator according to transport status */}
                                   <g transform={`translate(${vesselX}, ${vesselY})`} className="transition-all duration-1000">
                                     <circle r="10" className="fill-amber-400/20 animate-ping animate-duration-1500" />
                                     <circle r="6" className="fill-amber-500 stroke-slate-950 stroke-1.5" />
                                     
                                     <text y="3" textAnchor="middle" className="text-[10px] select-none cursor-default">
-                                      {isAirCarrier ? '✈️' : '🚢'}
+                                      {vehicleIcon}
                                     </text>
                                     
                                     {/* Floating percent label */}
-                                    <rect x="-24" y="-18" width="48" height="11" rx="3" className="fill-slate-950/90 stroke-slate-800" />
+                                    <rect x="-28" y="-18" width="56" height="11" rx="3" className="fill-slate-950/90 stroke-slate-800" />
                                     <text y="-10" textAnchor="middle" fill="#fbbf24" className="font-extrabold font-mono text-[6px]">
-                                      {Math.round(t * 100)}% MARÍTIMO
+                                      {Math.round(t * 100)}% {modeText}
                                     </text>
                                   </g>
                                 </svg>
@@ -2677,9 +2767,12 @@ export default function ClientDashboard({
                                   <span className="bg-amber-400 text-slate-950 font-black text-[8px] px-2 py-0.5 rounded-sm uppercase tracking-wider block w-max">
                                     MONITORIZADOR DE CABOTAGEM
                                   </span>
-                                  <h4 className="font-bold text-xs text-white">Canal Luanda — Cabinda</h4>
+                                  <h4 className="font-bold text-xs text-white">Canal {originCity} ➔ {destinationCity}</h4>
                                   <p className="text-[10px] text-slate-400 leading-normal font-sans">
-                                    O transporte marítimo de cabotagem conecta Luanda ao enclave de Cabinda (380 km), contornando as barreiras rodoviárias e garantindo a legalização fiscal ideal perante a AGT.
+                                    {isCabindaToLuanda 
+                                      ? 'O transporte de cabotagem conecta a produção local de Cabinda com entrega segura nos entrepostos comerciais de Luanda.'
+                                      : 'O transporte marítimo de cabotagem conecta Luanda ao enclave de Cabinda (380 km), contornando as barreiras rodoviárias e garantindo a legalização fiscal ideal perante a AGT.'
+                                    }
                                   </p>
                                 </div>
 
@@ -2690,11 +2783,13 @@ export default function ClientDashboard({
                                   </p>
                                   <p className="flex justify-between">
                                     <span className="text-slate-500">Vetor Carga:</span>
-                                    <span className="text-white font-sans font-semibold">{isAirCarrier ? "Aéreo Rápido" : "Marítimo Seguro"}</span>
+                                    <span className="text-white font-sans font-semibold">{vectorText}</span>
                                   </p>
                                   <p className="flex justify-between">
                                     <span className="text-slate-500">Polo Entrega:</span>
-                                    <span className="text-emerald-400 font-bold font-sans">B° 1º de Maio, Cabinda</span>
+                                    <span className="text-emerald-400 font-bold font-sans truncate max-w-[100px]">
+                                      {activeOrder.deliveryAddress || (isCabindaToLuanda ? "Depósito Central, Luanda" : "Armazém C-4, Cabinda")}
+                                    </span>
                                   </p>
                                 </div>
                               </div>
@@ -3040,43 +3135,106 @@ export default function ClientDashboard({
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b pb-1">2. Endereço Principal de Logística</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Província *</label>
-                    <input
-                      type="text"
-                      list="cd-provinces-list"
-                      value={signupForm.province}
-                      onChange={(e) => setSignupForm({ ...signupForm, province: e.target.value })}
-                      placeholder="Escreva a província (ex: Cabinda, Luanda...)"
-                      className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold"
-                      required
-                    />
-                    <datalist id="cd-provinces-list">
-                      {PROVINCES_OF_ANGOLA.map(p => (
-                        <option key={p} value={p} />
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-slate-700">Província *</label>
+                      {signupForm.province && (
+                        <button
+                          type="button"
+                          onClick={() => setSignupForm({ ...signupForm, province: '' })}
+                          className="text-[10px] text-amber-600 hover:text-amber-700 font-bold cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={signupForm.province}
+                        onChange={(e) => setSignupForm({ ...signupForm, province: e.target.value })}
+                        placeholder="Escreva: Cabinda, Luanda, Benguela, Huíla..."
+                        className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold text-slate-900 pr-8"
+                        required
+                        autoComplete="off"
+                      />
+                      {signupForm.province && (
+                        <button
+                          type="button"
+                          onClick={() => setSignupForm({ ...signupForm, province: '' })}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {['Cabinda', 'Luanda', 'Benguela', 'Huambo', 'Huíla', 'Uíge'].map((p) => (
+                        <button
+                          type="button"
+                          key={p}
+                          onClick={() => setSignupForm({ ...signupForm, province: p })}
+                          className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                            signupForm.province.toLowerCase() === p.toLowerCase()
+                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {p}
+                        </button>
                       ))}
-                    </datalist>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Município / Comuna *</label>
-                    <input
-                      type="text"
-                      list="cd-municipalities-list"
-                      value={signupForm.municipality}
-                      onChange={(e) => setSignupForm({ ...signupForm, municipality: e.target.value })}
-                      placeholder="Escreva o município (ex: Cabinda, Cazenga...)"
-                      className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold"
-                      required
-                    />
-                    <datalist id="cd-municipalities-list">
-                      {(MUNICIPALITIES[signupForm.province] || [
-                        'Cabinda (Sede)', 'Cacongo', 'Buco-Zau', 'Belize',
-                        'Luanda', 'Cazenga', 'Viana', 'Belas', 'Cacuaco', 'Talatona', 'Kilamba Kiaxi',
-                        'Benguela', 'Lobito', 'Huambo', 'Lubango', 'Uíge', 'Malanje', 'Soyo'
-                      ]).map(m => (
-                        <option key={m} value={m} />
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold text-slate-700">Município / Comuna *</label>
+                      {signupForm.municipality && (
+                        <button
+                          type="button"
+                          onClick={() => setSignupForm({ ...signupForm, municipality: '' })}
+                          className="text-[10px] text-amber-600 hover:text-amber-700 font-bold cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={signupForm.municipality}
+                        onChange={(e) => setSignupForm({ ...signupForm, municipality: e.target.value })}
+                        placeholder="Escreva: Liambo, Cabinda, Viana, Cazenga..."
+                        className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold text-slate-900 pr-8"
+                        required
+                        autoComplete="off"
+                      />
+                      {signupForm.municipality && (
+                        <button
+                          type="button"
+                          onClick={() => setSignupForm({ ...signupForm, municipality: '' })}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {['Liambo', 'Cabinda', 'Luanda', 'Viana', 'Cazenga', 'Cacongo', 'Belize', 'Buco-Zau'].map((m) => (
+                        <button
+                          type="button"
+                          key={m}
+                          onClick={() => setSignupForm({ ...signupForm, municipality: m })}
+                          className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                            signupForm.municipality.toLowerCase() === m.toLowerCase()
+                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {m}
+                        </button>
                       ))}
-                    </datalist>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">Bairro *</label>
@@ -3160,7 +3318,7 @@ export default function ClientDashboard({
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-900 text-amber-400 flex items-center justify-center font-bold">
-                      {c.name.substring(0, 2).toUpperCase()}
+                      {(c?.name || 'CL').substring(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-800">{c.name}</p>
@@ -3267,12 +3425,33 @@ export default function ClientDashboard({
                     className="w-full p-2.5 border rounded-xl"
                   />
                 </div>
+                <div>
+                  <label className="block text-slate-700 mb-1 text-[11px] font-bold">Província</label>
+                  <input
+                    type="text"
+                    value={profileForm.province}
+                    onChange={(e) => setProfileForm({ ...profileForm, province: e.target.value })}
+                    placeholder="Ex: Cabinda, Luanda, Benguela..."
+                    className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 mb-1 text-[11px] font-bold">Município / Comuna</label>
+                  <input
+                    type="text"
+                    value={profileForm.municipality}
+                    onChange={(e) => setProfileForm({ ...profileForm, municipality: e.target.value })}
+                    placeholder="Ex: Liambo, Cabinda, Viana, Cazenga..."
+                    className="w-full p-2.5 border rounded-xl bg-white text-xs font-semibold text-slate-900"
+                  />
+                </div>
                 <div className="col-span-2">
-                  <label className="block text-slate-705 mb-1 text-[11px] font-bold">Endereço / Morada de Cabinda</label>
+                  <label className="block text-slate-700 mb-1 text-[11px] font-bold">Endereço / Bairro / Rua / Ponto de Referência</label>
                   <input
                     type="text"
                     value={profileForm.address}
                     onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                    placeholder="Ex: Bairro Lândana, Rua Direita, nº 14"
                     className="w-full p-2.5 border rounded-xl"
                   />
                 </div>
@@ -3373,7 +3552,7 @@ export default function ClientDashboard({
                           <button
                             onClick={() => showModalAlert(
                               'Comprovativo de Compra Fiscal',
-                              `Visualização de recibo da compra comercial efetuada pelo Mediador:\n\n• Produto Adquirido: ${ord.productName}\n• Quantidade Operada: ${ord.quantity} unidades\n• Fornecedor: ${ord.supplierName}\n• Total Cobrado: ${formatCurrency(ord.totalAmount)}\n• Código da Guia AGT: BD-${ord.id.substring(4, 8).toUpperCase()}\n\nA compra física foi autenticada em Luanda no depósito principal.`,
+                              `Visualização de recibo da compra comercial efetuada pelo Mediador:\n\n• Produto Adquirido: ${ord.productName || 'Mercadoria'}\n• Quantidade Operada: ${ord.quantity || 1} unidades\n• Fornecedor: ${ord.supplierName || 'Fornecedor'}\n• Total Cobrado: ${formatCurrency(ord.totalAmount || 0)}\n• Código da Guia AGT: BD-${(ord.id || '00000000').slice(-4).toUpperCase()}\n\nA compra física foi autenticada em Luanda no depósito principal.`,
                               'info'
                             )}
                             className="text-[10px] text-sky-600 hover:underline font-bold block ml-auto mt-1 cursor-pointer"
@@ -4183,14 +4362,14 @@ export default function ClientDashboard({
           <div className="bg-slate-900 text-white rounded-3xl p-6 relative overflow-hidden shadow-md border border-slate-800">
             <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-40 h-40 bg-amber-500/15 rounded-full blur-2xl"></div>
             <div className="relative z-10 space-y-1">
-              <span className="text-[8px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-widest inline-block leading-none">
-                Serralharia & Metalurgia
+              <span className="text-[8px] bg-amber-400 text-slate-950 font-black px-2.5 py-1 rounded-full uppercase tracking-widest inline-block leading-none">
+                🏡 Terrenos • 🏠 Casas • 🚗 Carros • 🛠️ Serralharia
               </span>
               <h2 className="text-lg font-display font-black tracking-tight leading-none text-white">
-                Solicitar Serviços Especializados
+                Consultar e Solicitar Serviços
               </h2>
               <p className="text-xs text-slate-400 leading-relaxed max-w-2xl font-medium">
-                Contrate serviços de serralharia civil, reparação metálica e estruturas sob medida de fornecedores homologados em Luanda e Cabinda. A sua encomenda e o orçamento são fiscalizados e intermediados pelo Mediador Cabinda.
+                Consulte imóveis (venda de terrenos e casas), veículos (carros novos e seminovos), serviços de serralharia e despacho aduaneiro. Todos os orçamentos e transações são intermediados e fiscalizados com segurança pelo Mediador Cabinda.
               </p>
             </div>
           </div>
@@ -4230,66 +4409,154 @@ export default function ClientDashboard({
           {serviceActiveTab === 'catalog' ? (
             <div className="space-y-6">
               {!selectedServiceToRequest ? (
-                <div>
+                <div className="space-y-4">
+                  {/* Category Filter Pills & Search */}
+                  <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                      {[
+                        { id: 'todos', label: 'Todos os Serviços' },
+                        { id: 'terrenos', label: '🏡 Terrenos' },
+                        { id: 'casas', label: '🏠 Casas' },
+                        { id: 'carros', label: '🚗 Carros' },
+                        { id: 'serralharia', label: '🛠️ Serralharia' },
+                        { id: 'outros', label: '📦 Despacho & Outros' }
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => setServiceCategoryFilter(cat.id)}
+                          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                            serviceCategoryFilter === cat.id
+                              ? 'bg-amber-400 text-slate-950 font-black shadow-2xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative shrink-0 sm:w-64">
+                      <input
+                        type="text"
+                        value={serviceSearchQuery}
+                        onChange={(e) => setServiceSearchQuery(e.target.value)}
+                        placeholder="Pesquisar terreno, casa, carro..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:border-amber-400"
+                      />
+                      <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+                    </div>
+                  </div>
+
+                  {/* Services Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {supplierServices && supplierServices.length > 0 ? (
-                      supplierServices.map((srv) => (
+                    {(() => {
+                      const filteredServices = (supplierServices || []).filter((srv) => {
+                        const matchesCategory =
+                          serviceCategoryFilter === 'todos' ||
+                          (serviceCategoryFilter === 'terrenos' && srv.category === 'Venda de Terrenos') ||
+                          (serviceCategoryFilter === 'casas' && srv.category === 'Venda de Casas') ||
+                          (serviceCategoryFilter === 'carros' && srv.category === 'Venda de Carros') ||
+                          (serviceCategoryFilter === 'serralharia' && srv.category === 'Serralharia & Metalurgia') ||
+                          (serviceCategoryFilter === 'outros' && !['Venda de Terrenos', 'Venda de Casas', 'Venda de Carros', 'Serralharia & Metalurgia'].includes(srv.category));
+
+                        const q = serviceSearchQuery.toLowerCase().trim();
+                        const matchesSearch =
+                          !q ||
+                          srv.name.toLowerCase().includes(q) ||
+                          srv.description.toLowerCase().includes(q) ||
+                          srv.category.toLowerCase().includes(q) ||
+                          (srv.location && srv.location.toLowerCase().includes(q));
+
+                        return matchesCategory && matchesSearch;
+                      });
+
+                      if (filteredServices.length === 0) {
+                        return (
+                          <div className="col-span-1 md:col-span-2 text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
+                            <span className="text-3xl block mb-2">🔍</span>
+                            <p className="text-xs text-slate-500 font-bold uppercase">Nenhum serviço encontrado nesta categoria.</p>
+                          </div>
+                        );
+                      }
+
+                      return filteredServices.map((srv) => (
                         <div
                           key={srv.id}
-                          className="bg-white border border-slate-200 hover:border-amber-400 rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between group"
+                          className="bg-white border border-slate-200 hover:border-amber-400 rounded-2xl overflow-hidden shadow-2xs transition-all flex flex-col justify-between group"
                         >
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="bg-amber-100 text-amber-900 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                          {/* Image Header if available */}
+                          {srv.photoUrl && (
+                            <div className="relative h-44 w-full bg-slate-100 overflow-hidden">
+                              <img
+                                src={srv.photoUrl}
+                                alt={srv.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                                <span className="bg-slate-900/80 backdrop-blur-md text-amber-400 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border border-amber-400/20">
                                   {srv.category}
                                 </span>
-                                <h3 className="font-display font-bold text-slate-900 text-sm mt-1.5 leading-snug">
-                                  {srv.name}
-                                </h3>
                               </div>
-                              <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
-                                📍 {srv.location || 'Luanda'}
-                              </span>
+                              <div className="absolute top-2.5 right-2.5">
+                                <span className="bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/20 flex items-center gap-1">
+                                  📍 {srv.location || 'Luanda'}
+                                </span>
+                              </div>
                             </div>
-                            <p className="text-xs text-slate-500 leading-normal font-semibold">
-                              {srv.description}
-                            </p>
-                            <div className="pt-2 border-t border-slate-50 flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
-                              <span>Prazo Estimado:</span>
-                              <span className="text-slate-800 font-bold">{srv.executionTime}</span>
-                            </div>
-                          </div>
+                          )}
 
-                          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                            <div>
-                              <span className="text-[8px] text-slate-400 font-bold uppercase block">Preço de Referência</span>
-                              <span className="font-mono text-xs font-black text-slate-900">
-                                {srv.price.toLocaleString('pt-AO')} AOA
-                              </span>
+                          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                            <div className="space-y-2">
+                              {!srv.photoUrl && (
+                                <div className="flex justify-between items-start">
+                                  <span className="bg-amber-100 text-amber-900 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                                    {srv.category}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                                    📍 {srv.location || 'Luanda'}
+                                  </span>
+                                </div>
+                              )}
+                              <h3 className="font-display font-bold text-slate-900 text-sm leading-snug">
+                                {srv.name}
+                              </h3>
+                              <p className="text-xs text-slate-500 leading-relaxed font-normal line-clamp-3">
+                                {srv.description}
+                              </p>
+                              {srv.executionTime && (
+                                <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-semibold font-mono">
+                                  <span>Prazo / Disponibilidade:</span>
+                                  <span className="text-slate-800 font-bold">{srv.executionTime}</span>
+                                </div>
+                              )}
                             </div>
 
-                            <button
-                              onClick={() => {
-                                setSelectedServiceToRequest(srv);
-                                setServiceReqDesc('');
-                                setServiceReqLocation(client?.address || '');
-                                setServiceReqPhone(client?.phone || '');
-                                speak(`Selecionou ${srv.name}. Introduza os seus requisitos particulares.`);
-                              }}
-                              className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-xs"
-                            >
-                              Contratar Serviço
-                            </button>
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                              <div>
+                                <span className="text-[8px] text-slate-400 font-bold uppercase block">Valor de Referência</span>
+                                <span className="font-mono text-xs font-black text-slate-900">
+                                  {srv.price.toLocaleString('pt-AO')} AOA
+                                </span>
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  setSelectedServiceToRequest(srv);
+                                  setServiceReqDesc('');
+                                  setServiceReqLocation(client?.address || '');
+                                  setServiceReqPhone(client?.phone || '');
+                                  speak(`Selecionou ${srv.name}. Introduza os seus requisitos particulares.`);
+                                }}
+                                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shadow-2xs flex items-center gap-1"
+                              >
+                                <span>Solicitar Intermediação</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="col-span-1 md:col-span-2 text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
-                        <span className="text-2xl block mb-2">🛠️</span>
-                        <p className="text-xs text-slate-500 font-bold uppercase">Nenhum serviço disponível no catálogo.</p>
-                      </div>
-                    )}
+                      ));
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -4996,6 +5263,14 @@ export default function ClientDashboard({
           }}
           onCreateDirectOrder={(orderData) => {
             const newOrderId = `MED-${Math.floor(1000 + Math.random() * 9000)}`;
+            const isCabindaSupplier = 
+              orderData.routeDirection === 'Cabinda-Luanda' ||
+              (orderData.supplierLocation || '').toLowerCase().includes('cabinda');
+            const determinedRoute: 'Luanda-Cabinda' | 'Cabinda-Luanda' = 
+              orderData.routeDirection || (isCabindaSupplier ? 'Cabinda-Luanda' : 'Luanda-Cabinda');
+            const originCity = orderData.originCity || (determinedRoute === 'Cabinda-Luanda' ? 'Cabinda' : 'Luanda');
+            const destinationCity = orderData.destinationCity || (determinedRoute === 'Cabinda-Luanda' ? 'Luanda' : 'Cabinda');
+
             const newOrder: Order = {
               id: newOrderId,
               clientId: activeClientId,
@@ -5003,11 +5278,14 @@ export default function ClientDashboard({
               clientPhone: client?.phone || '+244 923 000 000',
               productId: orderData.productId,
               productCode: orderData.productCode,
-              productName: orderData.productName,
-              quantity: orderData.quantity,
+              productName: orderData.productName || 'Artigo Homologado',
+              quantity: orderData.quantity || 1,
               supplierName: orderData.supplierName,
               supplierPhone: orderData.supplierPhone,
               supplierLocation: orderData.supplierLocation,
+              routeDirection: determinedRoute,
+              originCity,
+              destinationCity,
               productPhotoUrl: orderData.productPhotoUrl,
               notes: orderData.notes,
               budgetRawPrice: orderData.budgetRawPrice,
@@ -5020,12 +5298,12 @@ export default function ClientDashboard({
               deliveryOption: orderData.deliveryOption,
               deliveryAddress: orderData.deliveryAddress,
               status: 'RECEBIDO',
-              pointsEarned: Math.round(orderData.budgetRawPrice / 1000),
+              pointsEarned: Math.round((orderData.budgetRawPrice || 0) / 1000),
               createdAt: new Date().toISOString()
             };
 
             onAddOrder(newOrder);
-            speak(`Solicitação de compra direta do artigo ${newOrder.productName} registada com sucesso!`);
+            speak(`Solicitação de compra direta de ${newOrder.productName} registada com sucesso! Rota: ${originCity} para ${destinationCity}.`);
             setSelectedProduct(null);
             setDirectBuySuccessOrder(newOrder);
           }}
@@ -5453,12 +5731,12 @@ export default function ClientDashboard({
                   {/* Profile Card */}
                   <div className="bg-white border rounded-3xl p-5 shadow-xs text-left space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-slate-900 text-amber-400 font-extrabold flex items-center justify-center text-lg shrink-0 font-extrabold">
-                        {matchedColab.name.substring(0, 2).toUpperCase()}
+                      <div className="w-12 h-12 rounded-full bg-slate-900 text-amber-400 font-extrabold flex items-center justify-center text-lg shrink-0">
+                        {(matchedColab?.name || 'CB').substring(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-extrabold text-slate-900 text-sm leading-tight">{matchedColab.name}</h4>
-                        <span className="text-[9.5px] bg-slate-100 text-slate-600 font-black px-2 py-0.5 rounded-sm uppercase tracking-wider">{matchedColab.role}</span>
+                        <h4 className="font-extrabold text-slate-900 text-sm leading-tight">{matchedColab?.name || 'Colaborador'}</h4>
+                        <span className="text-[9.5px] bg-slate-100 text-slate-600 font-black px-2 py-0.5 rounded-sm uppercase tracking-wider">{matchedColab?.role || 'Parceiro'}</span>
                       </div>
                     </div>
 
@@ -5687,6 +5965,154 @@ export default function ClientDashboard({
           </div>
         );
       })()}
+
+      {/* CLIENT EDIT ORDER & ROUTE MODAL */}
+      {isClientEditModalOpen && activeOrder && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden my-8 animate-in fade-in duration-200 text-slate-100">
+            <div className="bg-slate-950 p-5 border-b border-slate-800 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-base">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Editar / Corrigir Pedido e Rota</h3>
+                  <p className="text-[11px] text-slate-400">ID: <strong className="text-amber-400 font-mono">{activeOrder.id}</strong></p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsClientEditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-black transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveClientEdit} className="p-5 space-y-5">
+              
+              {/* ROUTE SELECTION */}
+              <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-2.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <span>🔄</span> Direção da Rota de Transporte
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setClientEditForm(prev => ({ ...prev, routeDirection: 'Luanda-Cabinda' }))}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      clientEditForm.routeDirection === 'Luanda-Cabinda'
+                        ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-lg shrink-0">🏙️➔🌴</span>
+                    <div>
+                      <p className="text-xs font-black uppercase">Luanda ➔ Cabinda</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Compras em Luanda enviadas para Cabinda</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setClientEditForm(prev => ({ ...prev, routeDirection: 'Cabinda-Luanda' }))}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                      clientEditForm.routeDirection === 'Cabinda-Luanda'
+                        ? 'bg-purple-950/60 border-purple-500 text-purple-300 ring-2 ring-purple-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-lg shrink-0">🌴➔🏙️</span>
+                    <div>
+                      <p className="text-xs font-black uppercase">Cabinda ➔ Luanda</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Expedição de Cabinda para Luanda</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* PRODUCT NAME & QUANTITY */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Nome do Produto / Artigo</label>
+                  <input
+                    type="text"
+                    required
+                    value={clientEditForm.productName}
+                    onChange={e => setClientEditForm(prev => ({ ...prev, productName: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Gerador 5KVA a Gasóleo ou Sacos de Peixe Seco"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Quantidade</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={clientEditForm.quantity}
+                    onChange={e => setClientEditForm(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Local de Origem / Fornecedor</label>
+                  <input
+                    type="text"
+                    value={clientEditForm.originLocation}
+                    onChange={e => setClientEditForm(prev => ({ ...prev, originLocation: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Mercado dos Congolenses (Luanda) ou Cacongo (Cabinda)"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Endereço de Entrega / Destino</label>
+                  <input
+                    type="text"
+                    value={clientEditForm.destinationLocation}
+                    onChange={e => setClientEditForm(prev => ({ ...prev, destinationLocation: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Armazém C-4 Cabinda ou Bairro Viana Luanda"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Observações / Instruções Especiais</label>
+                  <textarea
+                    rows={2}
+                    value={clientEditForm.notes}
+                    onChange={e => setClientEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Alguma instrução especial para o fornecedor ou transportadora..."
+                  />
+                </div>
+              </div>
+
+              {/* FOOTER BUTTONS */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsClientEditModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                >
+                  <span>💾</span>
+                  <span>Gravar Correção de Rota</span>
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

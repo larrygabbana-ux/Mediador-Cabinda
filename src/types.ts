@@ -32,16 +32,33 @@ export interface Order {
   clientId: string;
   clientName: string;
   clientPhone: string;
+  clientEmail?: string;
   productId?: string; // Associated supplier product ID
   productCode?: string; // Product SKU / Identity code e.g. PRD-1001
-  productName: string;
-  quantity: number;
-  supplierName: string;
-  supplierPhone: string;
-  supplierLocation: string;
+  productName?: string;
+  quantity?: number;
+  supplierName?: string;
+  supplierPhone?: string;
+  supplierLocation?: string;
   productPhotoUrl?: string;
   productPhotos?: { url: string; type: 'camera' | 'gallery' | 'document'; name: string }[];
   notes?: string;
+  items?: { id: string; name: string; quantity: number; unitPrice: number; supplierName?: string }[];
+  itemsTotal?: number;
+  freightCost?: number;
+  serviceFee?: number;
+  insuranceCost?: number;
+  trackingCode?: string;
+  paymentStatus?: string;
+  carrierCompany?: string;
+  waybillNumber?: string;
+  containerNumber?: string;
+  sealNumber?: string;
+  vesselName?: string;
+  departureDate?: string;
+  estimatedArrival?: string;
+  updatedAt?: string;
+  history?: { status: string; date: string; location: string; description: string }[];
   
   // Budget values
   budgetRawPrice?: number; // Base product price in AOA
@@ -50,17 +67,23 @@ export interface Order {
   commissionRate?: number; // 0.10 to 0.15 (10% to 15%)
   commissionAmount?: number;
   totalAmount?: number;
-  paid: boolean;
+  paid?: boolean;
   paymentMethod?: 'transferencia' | 'multicaixa' | 'referencia';
   paymentReference?: string;
   checkoutProofUrl?: string; // Comprovativo de compra
-  deliveryOption: 'escritorio' | 'domicilio';
+  deliveryOption?: 'escritorio' | 'domicilio';
   deliveryAddress?: string;
+  destinationProvince?: string;
+  destinationMunicipality?: string;
+  destinationAddress?: string;
 
   // Carriage details
   routeDirection?: 'Luanda-Cabinda' | 'Cabinda-Luanda';
   originCity?: string;
   destinationCity?: string;
+  originLocation?: string;
+  destinationLocation?: string;
+  city?: string;
   transportMode?: 'maritimo' | 'aereo' | 'terrestre';
   shippingCarrier?: string;
   shippingGuideNumber?: string;
@@ -72,7 +95,7 @@ export interface Order {
   feedback?: string; // Service evaluation notes
   complaint?: string; // Reclamações
   complaintResolved?: boolean;
-  pointsEarned: number;
+  pointsEarned?: number;
   createdAt: string;
 }
 
@@ -218,7 +241,7 @@ export interface SupplierService {
   supplierName: string;
   name: string;
   price: number; // base / estimated price in AOA
-  category: 'Despacho Aduaneiro' | 'Transporte de Carga' | 'Compra Assistida' | 'Embalamento e Paletização' | 'Inspeção de Mercadoria' | 'Outros';
+  category: 'Venda de Terrenos' | 'Venda de Casas' | 'Venda de Carros' | 'Serralharia & Metalurgia' | 'Despacho Aduaneiro' | 'Transporte de Carga' | 'Compra Assistida' | 'Embalamento e Paletização' | 'Inspeção de Mercadoria' | 'Outros' | string;
   description: string;
   photoUrl?: string;
   location?: 'Luanda' | 'Cabinda' | 'Ambos';
@@ -245,6 +268,13 @@ export interface ServiceRequest {
   createdAt: string;
 }
 
+export interface BotMessageAttachment {
+  url: string;
+  name?: string;
+  type?: 'gallery' | 'camera' | 'document' | 'supplier_proforma';
+  size?: string;
+}
+
 export interface BotMessage {
   id: string;
   sender: 'user' | 'bot' | 'system';
@@ -256,6 +286,15 @@ export interface BotMessage {
     label: string;
     view: string;
     icon?: string;
+  };
+  attachments?: BotMessageAttachment[];
+  photoUrl?: string; // Main photo shortcut
+  isSupplierIntermediation?: boolean;
+  supplierDetails?: {
+    supplierName?: string;
+    supplierPhone?: string;
+    supplierLocation?: string;
+    productName?: string;
   };
 }
 
@@ -272,18 +311,24 @@ export interface BotSettings {
 }
 
 export interface AdminMasterAccount {
+  id?: string;
   name: string;
   email: string;
   phone: string;
+  whatsapp?: string;
+  address?: string;
+  province?: string;
+  municipality?: string;
+  role?: string;
   passwordHash?: string;
   password?: string;
-  pin: string; // 6-digit numeric PIN
-  biometricEnrolled: boolean;
+  pin?: string; // 6-digit numeric PIN
+  biometricEnrolled?: boolean;
   biometricCredentialId?: string;
   biometricDeviceName?: string;
-  whatsappEnabled: boolean;
-  emailEnabled: boolean;
-  callEnabled: boolean;
+  whatsappEnabled?: boolean;
+  emailEnabled?: boolean;
+  callEnabled?: boolean;
   createdAt: string;
   lastLoginAt?: string;
 }

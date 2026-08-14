@@ -141,16 +141,23 @@ export default function App() {
     return false;
   });
 
+  const [adminUserDisplayName, setAdminUserDisplayName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('mediador_cabinda_admin_display_name') || 'Direção Geral - Mediador Cabinda';
+    }
+    return 'Direção Geral - Mediador Cabinda';
+  });
+
   // Authentication & Account Creation Portal states (Simplified 2-tab portal: Login / Signup)
   const [authPortalTab, setAuthPortalTab] = useState<'login' | 'signup'>('login');
   
-  // Registration form states
+  // Registration form states (Free-text for all provinces and municipalities)
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regProvince, setRegProvince] = useState('Cabinda');
-  const [regMunicipality, setRegMunicipality] = useState('Cabinda (Sede)');
+  const [regProvince, setRegProvince] = useState('');
+  const [regMunicipality, setRegMunicipality] = useState('');
   const [regBairro, setRegBairro] = useState('');
   const [regNif, setRegNif] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
@@ -162,21 +169,21 @@ export default function App() {
 
   // Role and dynamic session state
   const [role, setRole] = useState<'client' | 'admin'>('client');
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<Client[]>(() => getClients());
   const [activeClientId, setActiveClientId] = useState<string>(() => getCurrentClientId());
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => getOrders());
+  const [messages, setMessages] = useState<Message[]>(() => getMessages());
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [carriersList, setCarriersList] = useState<CarrierCompany[]>([]);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Suppliers state
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
-  const [supplierServices, setSupplierServices] = useState<SupplierService[]>([]);
-  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
-  const [supplierMessages, setSupplierMessages] = useState<SupplierMessage[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => getSuppliers());
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>(() => getSupplierProducts());
+  const [supplierServices, setSupplierServices] = useState<SupplierService[]>(() => getSupplierServices());
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>(() => getServiceRequests());
+  const [supplierMessages, setSupplierMessages] = useState<SupplierMessage[]>(() => getSupplierMessages());
 
   // Collaborators & sales state (synchronised across panels)
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -329,13 +336,25 @@ export default function App() {
       cleaned === 'admin' ||
       cleaned === 'administrador' ||
       cleaned === 'direcao@mediadorcabinda.ao' ||
+      cleaned === 'direcao@mediadorcabinda.org' ||
+      cleaned === 'direcao@mediadorcabina.org' ||
+      cleaned === 'direcao@mediadorcabina.ao' ||
       cleaned === 'gerencia@mediadorcabinda.ao' ||
       cleaned === 'admin@mediadorcabinda.ao' ||
+      cleaned === 'equipemediadorcabindacabinda@gmail.com' ||
+      cleaned === 'larrygabbana@gmail.com' ||
+      cleaned.startsWith('direcao@') ||
+      cleaned.startsWith('admin@') ||
+      cleaned.startsWith('gestao@') ||
+      cleaned.startsWith('gerencia@') ||
       cleaned === masterPassLower;
 
     if (isAdminMatch) {
       setRole('admin');
       setIsAdminLoggedIn(true);
+      const displayName = cleaned.includes('@') ? `Direção Geral (${cleaned})` : 'Direção Geral - Mediador Cabinda';
+      setAdminUserDisplayName(displayName);
+      safeLocalStorageSetItem('mediador_cabinda_admin_display_name', displayName);
       return { role: 'admin', type: 'system' };
     }
 
@@ -353,6 +372,8 @@ export default function App() {
     if (matchedColab) {
       setRole('admin');
       setIsAdminLoggedIn(true);
+      setAdminUserDisplayName(matchedColab.name);
+      safeLocalStorageSetItem('mediador_cabinda_admin_display_name', matchedColab.name);
       return { role: 'admin', type: 'collaborator', id: matchedColab.id };
     }
 
@@ -390,9 +411,11 @@ export default function App() {
 
     const newId = `cli-${Date.now()}`;
     const generatedEmail = regEmail.trim() || `${regPhone.replace(/\D/g, '') || 'cliente'}@mediadorcabinda.ao`;
+    const finalProvince = regProvince.trim() || 'Cabinda';
+    const finalMunicipality = regMunicipality.trim() || 'Cabinda';
     const fullAddress = regBairro.trim() 
-      ? `${regBairro.trim()}, ${regMunicipality}, ${regProvince}`
-      : `${regMunicipality}, ${regProvince}`;
+      ? `${regBairro.trim()}, ${finalMunicipality}, ${finalProvince}`
+      : `${finalMunicipality}, ${finalProvince}`;
 
     const newClient: Client = {
       id: newId,
@@ -401,8 +424,8 @@ export default function App() {
       email: generatedEmail,
       address: fullAddress,
       nif: regNif.trim() || `00${Math.floor(10000000 + Math.random() * 90000000)}CA01`,
-      province: regProvince,
-      municipality: regMunicipality,
+      province: finalProvince,
+      municipality: finalMunicipality,
       points: 100, // Welcome points
       tier: 'Standard'
     };
@@ -470,8 +493,18 @@ export default function App() {
       cleaned === 'admin' ||
       cleaned === 'administrador' ||
       cleaned === 'direcao@mediadorcabinda.ao' ||
+      cleaned === 'direcao@mediadorcabinda.org' ||
+      cleaned === 'direcao@mediadorcabina.org' ||
+      cleaned === 'direcao@mediadorcabina.ao' ||
       cleaned === 'gerencia@mediadorcabinda.ao' ||
       cleaned === 'admin@mediadorcabinda.ao' ||
+      cleaned === 'admin@mediadorcabinda.org' ||
+      cleaned === 'equipemediadorcabindacabinda@gmail.com' ||
+      cleaned === 'larrygabbana@gmail.com' ||
+      cleaned.startsWith('direcao@') ||
+      cleaned.startsWith('admin@') ||
+      cleaned.startsWith('gestao@') ||
+      cleaned.startsWith('gerencia@') ||
       cleaned === masterPassClean.toLowerCase();
 
     if (isMasterIdentifier || isMasterPasswordEntered) {
@@ -479,6 +512,9 @@ export default function App() {
       setIsAdminLoggedIn(true);
       setIsAuthorized(true);
       setAuthError('');
+      const displayName = cleaned.includes('@') ? `Direção Geral (${cleaned})` : 'Direção Geral - Mediador Cabinda';
+      setAdminUserDisplayName(displayName);
+      safeLocalStorageSetItem('mediador_cabinda_admin_display_name', displayName);
       if (rememberCode) {
         safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
         safeLocalStorageSetItem('mediador_cabinda_saved_access_code', MASTER_ADMIN_CREDENTIALS.passphrase);
@@ -503,6 +539,8 @@ export default function App() {
       setIsAdminLoggedIn(true);
       setIsAuthorized(true);
       setAuthError('');
+      setAdminUserDisplayName(matchedColab.name);
+      safeLocalStorageSetItem('mediador_cabinda_admin_display_name', matchedColab.name);
       if (rememberCode) {
         safeLocalStorageSetItem('mediador_cabinda_is_authorized', 'true');
         safeLocalStorageSetItem('mediador_cabinda_saved_access_code', matchedColab.id);
@@ -1273,7 +1311,7 @@ export default function App() {
                     title="Notificações e Perfil"
                   >
                   <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 border-2 border-slate-950 flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm relative overflow-hidden">
-                    {clients.find(c => c.id === activeClientId)?.name.substring(0, 2).toUpperCase() || 'MC'}
+                    {(clients.find(c => c.id === activeClientId)?.name || 'MC').substring(0, 2).toUpperCase()}
                   </div>
                   {unreadNotifs.length > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-600 text-white font-mono text-[10px] font-bold rounded-full flex items-center justify-center px-1 animate-bounce shadow-md border border-slate-950">
@@ -1404,7 +1442,7 @@ export default function App() {
             {/* Quick Profile info */}
             <div className="p-4 border-b bg-slate-55 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-sm shrink-0">
-                {clients.find(c => c.id === activeClientId)?.name.substring(0, 2).toUpperCase() || 'MC'}
+                {(clients.find(c => c.id === activeClientId)?.name || 'MC').substring(0, 2).toUpperCase()}
               </div>
               <div className="overflow-hidden">
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Cliente Ativo</p>
@@ -1873,7 +1911,7 @@ export default function App() {
                 <div className="p-3 space-y-2.5 bg-white">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-full bg-slate-900 text-amber-400 font-extrabold text-xs flex items-center justify-center shrink-0 border border-slate-700">
-                      {clients.find(c => c.id === activeClientId)?.name.substring(0, 2).toUpperCase() || 'MC'}
+                      {(clients.find(c => c.id === activeClientId)?.name || 'MC').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-black text-slate-900 truncate">
@@ -2194,56 +2232,116 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Província e Município (Escrita Livre com Sugestões) */}
+                          {/* Província e Município (Escrita 100% Livre para Todas as Províncias e Novos Municípios) */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
-                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                Província de Destino *
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                                  Sua Província *
+                                </label>
+                                {regProvince && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRegProvince('')}
+                                    className="text-[10px] text-amber-600 hover:text-amber-700 font-bold cursor-pointer"
+                                  >
+                                    Limpar
+                                  </button>
+                                )}
+                              </div>
                               <div className="relative">
                                 <input
                                   type="text"
-                                  list="app-provinces-list"
                                   value={regProvince}
                                   onChange={(e) => setRegProvince(e.target.value)}
-                                  placeholder="Escreva a província (ex: Cabinda, Luanda...)"
+                                  placeholder="Escreva: Cabinda, Luanda, Benguela..."
                                   required
-                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                  autoComplete="off"
+                                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900 pr-8"
                                 />
-                                <datalist id="app-provinces-list">
-                                  {PROVINCES_OF_ANGOLA.map((prov) => (
-                                    <option key={prov} value={prov} />
-                                  ))}
-                                </datalist>
+                                {regProvince && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRegProvince('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200"
+                                    title="Apagar texto"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
                               </div>
-                              <p className="text-[9px] text-slate-400">Pode escrever qualquer província</p>
+                              {/* Sugestões rápidas de 1 clique (opcionais, sem interferir na digitação) */}
+                              <div className="flex flex-wrap gap-1 pt-0.5">
+                                {['Cabinda', 'Luanda', 'Benguela', 'Huambo', 'Huíla', 'Uíge'].map((p) => (
+                                  <button
+                                    type="button"
+                                    key={p}
+                                    onClick={() => setRegProvince(p)}
+                                    className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                      regProvince.toLowerCase() === p.toLowerCase()
+                                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
 
                             <div className="space-y-1">
-                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                Município / Comuna *
-                              </label>
+                              <div className="flex items-center justify-between">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                                  Município / Comuna *
+                                </label>
+                                {regMunicipality && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRegMunicipality('')}
+                                    className="text-[10px] text-amber-600 hover:text-amber-700 font-bold cursor-pointer"
+                                  >
+                                    Limpar
+                                  </button>
+                                )}
+                              </div>
                               <div className="relative">
                                 <input
                                   type="text"
-                                  list="app-municipalities-list"
                                   value={regMunicipality}
                                   onChange={(e) => setRegMunicipality(e.target.value)}
-                                  placeholder="Escreva o município (ex: Cabinda, Cazenga...)"
+                                  placeholder="Escreva: Liambo, Cabinda, Viana, Luanda..."
                                   required
-                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900"
+                                  autoComplete="off"
+                                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-slate-900 pr-8"
                                 />
-                                <datalist id="app-municipalities-list">
-                                  {(MUNICIPALITIES[regProvince] || [
-                                    'Cabinda (Sede)', 'Cacongo', 'Buco-Zau', 'Belize',
-                                    'Luanda', 'Cazenga', 'Viana', 'Belas', 'Cacuaco', 'Talatona', 'Kilamba Kiaxi',
-                                    'Benguela', 'Lobito', 'Huambo', 'Lubango', 'Uíge', 'Malanje', 'Soyo'
-                                  ]).map((mun) => (
-                                    <option key={mun} value={mun} />
-                                  ))}
-                                </datalist>
+                                {regMunicipality && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRegMunicipality('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-200"
+                                    title="Apagar texto"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
                               </div>
-                              <p className="text-[9px] text-slate-400">Pode escrever qualquer município</p>
+                              {/* Sugestões rápidas incluindo Liambo e outros municípios */}
+                              <div className="flex flex-wrap gap-1 pt-0.5">
+                                {['Liambo', 'Cabinda', 'Luanda', 'Viana', 'Cazenga', 'Cacongo', 'Belize', 'Buco-Zau'].map((m) => (
+                                  <button
+                                    type="button"
+                                    key={m}
+                                    onClick={() => setRegMunicipality(m)}
+                                    className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                      regMunicipality.toLowerCase() === m.toLowerCase()
+                                        ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    {m}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           </div>
 
@@ -2809,8 +2907,16 @@ export default function App() {
           setCurrentView(view as any);
           speakText(`Navegando para ${view}`);
         }}
-        clientName={clients.find(c => c.id === activeClientId)?.name}
-        clientTier={clients.find(c => c.id === activeClientId)?.tier}
+        clientName={
+          (role === 'admin' || isAdminLoggedIn)
+            ? (adminUserDisplayName || 'Direção Geral - Mediador Cabinda')
+            : (clients.find(c => c.id === activeClientId)?.name || 'Cliente Cabinda')
+        }
+        clientTier={
+          (role === 'admin' || isAdminLoggedIn)
+            ? 'Direção Executiva'
+            : (clients.find(c => c.id === activeClientId)?.tier || 'Standard')
+        }
         botSettings={botSettings}
         dynamicLogisticsConfig={logisticsConfig}
         dynamicKnowledgeBase={knowledgeBase}

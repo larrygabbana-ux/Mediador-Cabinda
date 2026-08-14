@@ -76,7 +76,9 @@ import {
   PlusCircle,
   Trash,
   Eye,
-  ArrowRight
+  ArrowRight,
+  Sliders,
+  Edit2
 } from 'lucide-react';
 import SharedChat from './SharedChat';
 import { downloadOrderInvoice, downloadCollaboratorSaleInvoice } from '../utils/invoiceDownloader';
@@ -91,6 +93,17 @@ import {
   INITIAL_DYNAMIC_KNOWLEDGE_BASE
 } from '../utils/aiBotKnowledge';
 import { MARKETPLACE_CATEGORIES, getCategoryById, getSubCategoryName } from '../data/marketplaceTaxonomy';
+import { 
+  CommissionTier, 
+  DEFAULT_COMMISSION_TIERS, 
+  loadSavedCommissionTiers, 
+  saveCommissionTiers, 
+  getTierForPrice, 
+  getCommissionRateForPrice 
+} from '../data/commissionTiers';
+import { CommissionTiersModal } from './collaborators/CommissionTiersModal';
+import { EditCollaboratorSaleModal } from './collaborators/EditCollaboratorSaleModal';
+import { EditCollaboratorModal } from './collaborators/EditCollaboratorModal';
 
 interface AdminDashboardProps {
   clients: Client[];
@@ -518,6 +531,12 @@ export default function AdminDashboard({
     }, 120);
   };
 
+  // Commission Tiers & Modals State
+  const [commissionTiers, setCommissionTiers] = useState<CommissionTier[]>(() => loadSavedCommissionTiers());
+  const [showTierConfigModal, setShowTierConfigModal] = useState<boolean>(false);
+  const [editingColabSale, setEditingColabSale] = useState<CollaboratorSale | null>(null);
+  const [editingCollaborator, setEditingCollaborator] = useState<Collaborator | null>(null);
+
   // Collaborator and Sales Form State
   const [newColabForm, setNewColabForm] = useState({
     name: '',
@@ -538,17 +557,15 @@ export default function AdminDashboard({
     saleDescription: '',
     saleAmount: 220000, // in AOA
     commissionPrice: 35000, // total commission generated
-    collaboratorPercentage: 12
+    collaboratorPercentage: 10,
+    pricingMode: 'manual' as 'manual' | 'tier'
   });
 
-  const [isCalculationDynamic, setIsCalculationDynamic] = useState<boolean>(true);
+  const [isCalculationDynamic, setIsCalculationDynamic] = useState<boolean>(false);
 
-  // Helper helper to get dynamic commission suggestions based on sale value
+  // Helper to get dynamic commission suggestions based on sale value from custom tiers
   const getDynamicCommissionRate = (saleAmount: number): number => {
-    if (saleAmount < 300000) return 8;       // Até 300 Mil Kz: 8%
-    if (saleAmount < 1000000) return 12;     // 300 Mil até 1 M Kz: 12%
-    if (saleAmount < 3000000) return 15;     // 1 M até 3 M Kz: 15%
-    return 18;                              // Acima de 3 M Kz: 18%
+    return getCommissionRateForPrice(saleAmount, commissionTiers);
   };
   
   // Form input builders
@@ -630,7 +647,7 @@ export default function AdminDashboard({
 
   const SYSTEM_STOCK_GALLERY = [
     {
-      category: "👗 Feminino & Mulheres",
+      category: "👗 Feminino",
       images: [
         { name: "Peruca Lace Front 13x4 Cabelo Humano 30'", url: "https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=500&auto=format&fit=crop&q=60" },
         { name: "Peruca Bob Lisa Cabelo Virgem 12'", url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=500&auto=format&fit=crop&q=60" },
@@ -641,7 +658,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "👔 Masculino & Homens",
+      category: "👔 Masculino",
       images: [
         { name: "Fato Executivo Slim Fit 3 Peças", url: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500&auto=format&fit=crop&q=60" },
         { name: "Camisa Formal Algodão Puro", url: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=500&auto=format&fit=crop&q=60" },
@@ -651,7 +668,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "💻 Computadores & Eletrónicos",
+      category: "💻 Eletrónicos",
       images: [
         { name: "Computador Portátil Profissional i5/i7", url: "https://images.unsplash.com/photo-1496181130204-7552cc14ac1a?w=500&auto=format&fit=crop&q=60" },
         { name: "Smart TV 55' 4K Ultra HD", url: "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=500&auto=format&fit=crop&q=60" },
@@ -661,7 +678,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "🌾 Alimentos & Produtos do Campo",
+      category: "🌾 Alimentos",
       images: [
         { name: "Saco de Bombó Seco de Cabinda 50kg", url: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=60" },
         { name: "Mandioca Fresca & Batata Doce", url: "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=500&auto=format&fit=crop&q=60" },
@@ -670,7 +687,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "🐂 Animais & Pecuária",
+      category: "🐂 Animais",
       images: [
         { name: "Boi Touro Reprodutor Nelore 450kg", url: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=60" },
         { name: "Vacas Leiteiras Girolando", url: "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=500&auto=format&fit=crop&q=60" },
@@ -678,7 +695,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "⚡ Sistemas Solares & Geradores",
+      category: "⚡ Energia",
       images: [
         { name: "Painel Solar Monocristalino Premium", url: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=500&auto=format&fit=crop&q=60" },
         { name: "Bateria de Lítio e Controlador", url: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=500&auto=format&fit=crop&q=60" },
@@ -686,7 +703,7 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "⚙️ Bombas de Água & Construção",
+      category: "⚙️ Construção",
       images: [
         { name: "Bomba Periférica de Água Pedrollo", url: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=60" },
         { name: "Maleta de Ferramentas e Chaves", url: "https://images.unsplash.com/photo-1534224039826-c7a0eda0e6b3?w=500&auto=format&fit=crop&q=60" },
@@ -694,11 +711,19 @@ export default function AdminDashboard({
       ]
     },
     {
-      category: "🚗 Auto & Peças Sobressalentes",
+      category: "🚗 Auto & Peças",
       images: [
         { name: "Pneus Novos Todo-o-Terreno 4x4", url: "https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=500&auto=format&fit=crop&q=60" },
         { name: "Bateria Automóvel 12V Alta Capacidade", url: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=500&auto=format&fit=crop&q=60" },
         { name: "Óleo de Motor Sintético e Filtros", url: "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500&auto=format&fit=crop&q=60" }
+      ]
+    },
+    {
+      category: "📦 Diversos",
+      images: [
+        { name: "Jogo de Cama & Decoração Completo", url: "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=500&auto=format&fit=crop&q=60" },
+        { name: "Mochila Escolar & Material de Escritório", url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=60" },
+        { name: "Artigos de Artesanato Tradicional", url: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60" }
       ]
     }
   ];
@@ -749,20 +774,34 @@ export default function AdminDashboard({
     }
   }, [suppliers, adminSelectedSupplierId]);
 
-  const trackingSteps = [
-    { status: 'RECEBIDO', title: '1. Pedido Registado', desc: 'Sua solicitação de intermediação entre Cabinda e Luanda foi salva.' },
-    { status: 'ANALISE', title: '2. Em Análisando', desc: 'Nossa equipa localiza fisicamente o produto em Luanda de forma fiscal.' },
-    { status: 'ORCADO', title: '3. Orçamento Pronto', desc: 'O valor total foi calculado. Aguardamos sua aprovação para efetuar a compra.' },
-    { status: 'PAGO', title: '4. Pagamento Confirmado', desc: 'Confirmamos o pagamento. Nossos compradores estão se deslocando ao fornecedor.' },
-    { status: 'COMPRADO', title: '5. Mercadoria Adquirida', desc: 'Produto comprado e faturado fisicamente. Sendo preparado para embalagem.' },
-    { status: 'TRANSPORTE', title: '6. Lote em Trânsito', desc: 'Produto entregue ao despachante marítimo ou aéreo parceiro.' },
-    { status: 'CABINDA', title: '7. Chegou a Cabinda', desc: 'A carga deu entrada física no Porto de Cabinda e segue para descarga.' },
-    { status: 'LEVANTAMENTO', title: '8. Disponível p/ Balcão', desc: 'Mercadoria desalfandegada no balcão de Cabinda. Pronto para entrega.' },
-    { status: 'ENTREGUE', title: '9. Entrega Concluída', desc: 'Mercadoria entregue ou levantada com sucesso no balcão.' }
-  ] as const;
+  const getTrackingSteps = (order?: Order | null) => {
+    const isCabindaOrigin = 
+      order?.routeDirection === 'Cabinda-Luanda' ||
+      (order?.originCity || '').toLowerCase().includes('cabinda') ||
+      (order?.originLocation || '').toLowerCase().includes('cabinda') ||
+      (order?.supplierLocation || '').toLowerCase().includes('cabinda');
 
-  const getCurrentStatusIndex = (status: OrderStatus): number => {
-    return trackingSteps.findIndex(step => step.status === status);
+    const startProv = isCabindaOrigin ? 'Cabinda' : 'Luanda';
+    const endProv = isCabindaOrigin ? 'Luanda' : 'Cabinda';
+
+    return [
+      { status: 'RECEBIDO', title: '1. Pedido Registado', desc: `Sua solicitação de intermediação entre ${startProv} e ${endProv} foi salva.` },
+      { status: 'ANALISE', title: '2. Em Análise', desc: `Nossa equipa localiza fisicamente o produto em ${startProv} de forma fiscal.` },
+      { status: 'ORCADO', title: '3. Orçamento Pronto', desc: 'O valor total foi calculated. Aguardamos sua aprovação para efetuar a compra.' },
+      { status: 'PAGO', title: '4. Pagamento Confirmado', desc: 'Confirmamos o pagamento. Nossos compradores estão se deslocando ao fornecedor.' },
+      { status: 'COMPRADO', title: '5. Mercadoria Adquirida', desc: `Produto comprado e faturado fisicamente em ${startProv}. Sendo preparado para embalagem.` },
+      { status: 'TRANSPORTE', title: '6. Lote em Trânsito', desc: `Produto entregue ao despachante marítimo ou aéreo parceiro de ${startProv} para ${endProv}.` },
+      { status: 'CABINDA', title: `7. Chegou a ${endProv}`, desc: `A carga deu entrada física nos depósitos de ${endProv} e segue para descarga.` },
+      { status: 'LEVANTAMENTO', title: `8. Disponível p/ Balcão`, desc: `Mercadoria desalfandegada no balcão de ${endProv}. Pronto para entrega.` },
+      { status: 'ENTREGUE', title: '9. Entrega Concluída', desc: 'Mercadoria entregue ou levantada com sucesso no balcão.' }
+    ] as const;
+  };
+
+  const trackingSteps = getTrackingSteps(trackingModalOrder || null);
+
+  const getCurrentStatusIndex = (status: OrderStatus, order?: Order | null): number => {
+    const steps = getTrackingSteps(order || trackingModalOrder || null);
+    return steps.findIndex(step => step.status === status);
   };
 
   const showModalAlert = (title: string, message: string, type: 'success' | 'info' | 'warning' = 'success') => {
@@ -847,10 +886,53 @@ export default function AdminDashboard({
       saleDescription: '',
       saleAmount: 220000,
       commissionPrice: 35000,
-      collaboratorPercentage: 12
+      collaboratorPercentage: 10,
+      pricingMode: 'manual'
     });
     
-    showModalAlert('Venda Registada para Organização', `A venda promovida por ${col.name} para o cliente "${newSale.clientName}" foi registada. A comissão de ${newSale.collaboratorPercentage}% representará um ganho de ${formatCurrency(calculatedCommission)} para ele após a liquidação oficial.`, 'success');
+    showModalAlert('Venda Registada para Organização', `A venda promovida por ${col.name} para o cliente "${newSale.clientName}" foi registada com sucesso. Com base no valor do bem, foi acordada a comissão de ${newSale.collaboratorPercentage}% (${formatCurrency(calculatedCommission)}).`, 'success');
+  };
+
+  const handleUpdateColabSale = (updatedSale: CollaboratorSale) => {
+    const updatedSales = collaboratorSales.map(s => s.id === updatedSale.id ? updatedSale : s);
+    
+    // Recalculate collaborator totals accurately
+    const updatedColabs = collaborators.map(c => {
+      if (c.id === updatedSale.collaboratorId) {
+        const paidTotal = updatedSales
+          .filter(s => s.collaboratorId === c.id && s.status === 'pago')
+          .reduce((acc, s) => acc + s.calculatedCommission, 0);
+        return {
+          ...c,
+          totalEarnedCommissions: paidTotal
+        };
+      }
+      return c;
+    });
+
+    onUpdateCollaboratorSales(updatedSales);
+    onUpdateCollaborators(updatedColabs);
+    setEditingColabSale(null);
+    showModalAlert('Negócio Atualizado', `A comissão do negócio de "${updatedSale.clientName}" foi ajustada para ${updatedSale.collaboratorPercentage}% (${formatCurrency(updatedSale.calculatedCommission)}).`, 'success');
+  };
+
+  const handleUpdateCollaborator = (updatedColab: Collaborator) => {
+    const updatedColabs = collaborators.map(c => c.id === updatedColab.id ? updatedColab : c);
+    onUpdateCollaborators(updatedColabs);
+    setEditingCollaborator(null);
+    showModalAlert('Perfil Atualizado', `Os dados do parceiro ${updatedColab.name} foram atualizados com sucesso.`, 'success');
+  };
+
+  const handleSaveTiers = (newTiers: CommissionTier[]) => {
+    setCommissionTiers(newTiers);
+    saveCommissionTiers(newTiers);
+    showModalAlert('Tabela de Percentagens Salva', 'As novas faixas de comissão por valor do bem foram atualizadas com sucesso.', 'success');
+  };
+
+  const handleResetTiers = () => {
+    setCommissionTiers(DEFAULT_COMMISSION_TIERS);
+    saveCommissionTiers(DEFAULT_COMMISSION_TIERS);
+    showModalAlert('Valores Padrão Restaurados', 'A tabela de faixas de comissão foi restaurada para a configuração original.', 'info');
   };
 
   const handleToggleSaleStatus = (saleId: string) => {
@@ -902,6 +984,116 @@ export default function AdminDashboard({
   };
 
   const activeOrder = orders.find(o => o.id === selectedOrderId);
+
+  // Admin Order Edit Modal State
+  const [isEditingOrderModalOpen, setIsEditingOrderModalOpen] = useState(false);
+  const [editOrderForm, setEditOrderForm] = useState<{
+    productName: string;
+    productCode: string;
+    quantity: number;
+    routeDirection: 'Luanda-Cabinda' | 'Cabinda-Luanda';
+    originLocation: string;
+    destinationLocation: string;
+    notes: string;
+    status: OrderStatus;
+    budgetRawPrice: number;
+    budgetShipping: number;
+    dispatchFee: number;
+    commissionRate: number;
+    shippingCarrier: string;
+    shippingGuideNumber: string;
+    estimateDeliveryDate: string;
+  }>({
+    productName: '',
+    productCode: '',
+    quantity: 1,
+    routeDirection: 'Luanda-Cabinda',
+    originLocation: '',
+    destinationLocation: '',
+    notes: '',
+    status: 'RECEBIDO',
+    budgetRawPrice: 0,
+    budgetShipping: 0,
+    dispatchFee: 0,
+    commissionRate: 0.12,
+    shippingCarrier: '',
+    shippingGuideNumber: '',
+    estimateDeliveryDate: ''
+  });
+
+  const handleOpenEditOrderModal = () => {
+    if (!activeOrder) return;
+    setEditOrderForm({
+      productName: activeOrder.productName || '',
+      productCode: activeOrder.productCode || '',
+      quantity: activeOrder.quantity || 1,
+      routeDirection: activeOrder.routeDirection || 'Luanda-Cabinda',
+      originLocation: activeOrder.originLocation || activeOrder.supplierName || '',
+      destinationLocation: activeOrder.destinationLocation || activeOrder.city || '',
+      notes: activeOrder.notes || '',
+      status: activeOrder.status || 'RECEBIDO',
+      budgetRawPrice: activeOrder.budgetRawPrice || 0,
+      budgetShipping: activeOrder.budgetShipping || 0,
+      dispatchFee: activeOrder.dispatchFee || 0,
+      commissionRate: activeOrder.commissionRate || 0.12,
+      shippingCarrier: activeOrder.shippingCarrier || '',
+      shippingGuideNumber: activeOrder.shippingGuideNumber || '',
+      estimateDeliveryDate: activeOrder.estimateDeliveryDate || ''
+    });
+    setIsEditingOrderModalOpen(true);
+  };
+
+  const handleSaveEditedOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeOrder) return;
+
+    const rawPrice = Number(editOrderForm.budgetRawPrice) || 0;
+    const shippingCost = Number(editOrderForm.budgetShipping) || 0;
+    const dispatchFee = Number(editOrderForm.dispatchFee) || 0;
+    const commRate = Number(editOrderForm.commissionRate) || 0.12;
+    const commAmt = Math.round(rawPrice * commRate);
+    const total = rawPrice + shippingCost + dispatchFee + commAmt;
+
+    const updated: Order = {
+      ...activeOrder,
+      productName: editOrderForm.productName,
+      productCode: editOrderForm.productCode ? editOrderForm.productCode.trim() : undefined,
+      quantity: Number(editOrderForm.quantity) || 1,
+      routeDirection: editOrderForm.routeDirection,
+      originLocation: editOrderForm.originLocation,
+      destinationLocation: editOrderForm.destinationLocation,
+      notes: editOrderForm.notes,
+      status: editOrderForm.status,
+      budgetRawPrice: rawPrice,
+      budgetShipping: shippingCost,
+      dispatchFee: dispatchFee,
+      commissionRate: commRate,
+      commissionAmount: commAmt,
+      totalAmount: total > 0 ? total : activeOrder.totalAmount,
+      shippingCarrier: editOrderForm.shippingCarrier || activeOrder.shippingCarrier,
+      shippingGuideNumber: editOrderForm.shippingGuideNumber || activeOrder.shippingGuideNumber,
+      estimateDeliveryDate: editOrderForm.estimateDeliveryDate || activeOrder.estimateDeliveryDate
+    };
+
+    onUpdateOrder(updated);
+
+    onAddNotification({
+      id: `notif-${Date.now()}`,
+      clientId: activeOrder.clientId,
+      orderId: activeOrder.id,
+      title: 'Atualização nos Detalhes do Pedido & Rota',
+      message: `A Direção Geral atualizou a sua encomenda "${editOrderForm.productName}". Rota definida: ${editOrderForm.routeDirection === 'Cabinda-Luanda' ? 'Cabinda ➔ Luanda' : 'Luanda ➔ Cabinda'}. Estado: ${editOrderForm.status}`,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+
+    setIsEditingOrderModalOpen(false);
+    showModalAlert(
+      'Pedido e Rota Atualizados',
+      `O pedido ID #${activeOrder.id} foi atualizado com sucesso!\n\n• Rota: ${editOrderForm.routeDirection === 'Cabinda-Luanda' ? 'Cabinda ➔ Luanda' : 'Luanda ➔ Cabinda'}\n• Produto: ${editOrderForm.productName}\n• Estado: ${editOrderForm.status}\n\nO cliente foi notificado e a aplicação já reflete estas alterações em tempo real.`,
+      'success'
+    );
+  };
 
   // FINANCIAL FORMULAS & ANALYTICS
   const ordersTotalValue = orders.reduce((acc, ord) => acc + (ord.budgetRawPrice || 0), 0);
@@ -1890,7 +2082,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                     <div key={ord.id} className="flex-1 flex flex-col items-center group relative h-full justify-end">
                       {/* Tooltip */}
                       <span className="hidden group-hover:block absolute top-0 bg-slate-900 text-white text-[10px] p-2 rounded-lg -translate-y-8 shadow-md z-40 whitespace-nowrap">
-                        {ord.productName.substring(0, 20)}... <br/> Profit: <strong>{formatCurrency(comm)}</strong>
+                        {(ord.productName || 'Produto').substring(0, 20)}... <br/> Profit: <strong>{formatCurrency(comm)}</strong>
                       </span>
                       
                       {/* Interactive Bar */}
@@ -2056,6 +2248,13 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       <span className="text-[10px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full font-bold uppercase">
                         {activeOrder.status}
                       </span>
+                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border flex items-center gap-1 shadow-2xs ${
+                        activeOrder.routeDirection === 'Cabinda-Luanda'
+                          ? 'bg-purple-100 text-purple-900 border-purple-300'
+                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      }`}>
+                        🔄 {activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Rota: Cabinda ➔ Luanda' : 'Rota: Luanda ➔ Cabinda'}
+                      </span>
                       {activeOrder.productCode && (
                         <span className="text-[10px] font-mono font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md shadow-2xs">
                           🏷️ {activeOrder.productCode}
@@ -2169,6 +2368,14 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                     <div className="mt-3 flex flex-col gap-1.5 justify-end">
                       <button
                         type="button"
+                        onClick={handleOpenEditOrderModal}
+                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-extrabold rounded-lg text-[10px] uppercase tracking-wide border border-slate-700 transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-xs active:scale-95"
+                        title="Editar produto, quantidade, rota (Luanda-Cabinda / Cabinda-Luanda), orçamentos e estado"
+                      >
+                        ✏️ Editar Pedido / Rota
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleShareTrackingMessage(activeOrder)}
                         className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-xs"
                         title="Partilhar código e link de rastreio formatado por WhatsApp ou copiar"
@@ -2202,13 +2409,13 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                   <div className="flex items-center justify-between mb-3.5">
                     <span className="text-[10px] uppercase font-bold text-slate-400 font-sans tracking-wider">Passo-a-Passo da Evolução de Transporte</span>
                     <span className="text-[10px] font-bold text-sky-750 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
-                      Etapa {getCurrentStatusIndex(activeOrder.status) + 1} de 9: <span className="uppercase font-extrabold">{trackingSteps[getCurrentStatusIndex(activeOrder.status)]?.title.split('. ')[1] || 'Registado'}</span>
+                      Etapa {getCurrentStatusIndex(activeOrder.status, activeOrder) + 1} de 9: <span className="uppercase font-extrabold">{getTrackingSteps(activeOrder)[getCurrentStatusIndex(activeOrder.status, activeOrder)]?.title.split('. ')[1] || 'Registado'}</span>
                     </span>
                   </div>
                   
                   <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2 shrink-0 scrollbar-none" style={{ minWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
-                    {trackingSteps.map((step, idx) => {
-                      const curIdx = getCurrentStatusIndex(activeOrder.status);
+                    {getTrackingSteps(activeOrder).map((step, idx) => {
+                      const curIdx = getCurrentStatusIndex(activeOrder.status, activeOrder);
                       const isDone = idx < curIdx;
                       const isCurrent = idx === curIdx;
                       
@@ -2746,7 +2953,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                   <div className="flex items-start justify-between border-b pb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-xl bg-slate-900 text-amber-400 font-black flex items-center justify-center text-sm shadow-xs border border-slate-800 shrink-0">
-                        {selectedClient.name.split(' ').map(n=>n[0]).join('').slice(0, 2).toUpperCase()}
+                        {((selectedClient.name || 'MC').split(' ').filter(Boolean).map(n=>n[0]).join('').slice(0, 2) || 'MC').toUpperCase()}
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-900 text-sm leading-tight">{selectedClient.name}</h4>
@@ -4063,6 +4270,39 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                       </button>
                                     </>
                                   )}
+
+                                  {adminNewProductForm.category === 'diversos' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Conjunto de Edredão & Lençóis Casal 4 Peças",
+                                          price: 22000,
+                                          originalPrice: 26000,
+                                          description: "Jogo de cama completo 100% algodão acetinado com toque suave e acabamento decorativo premium.",
+                                          photoUrl: "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Edredão & Lençóis Casal
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdminNewProductForm({
+                                          ...adminNewProductForm,
+                                          name: "Mochila Executiva Impermeável com Entrada USB",
+                                          price: 18500,
+                                          originalPrice: 22000,
+                                          description: "Mochila reforçada anti-roubo para portátil até 15.6 polegadas e divisórias ergonómicas.",
+                                          photoUrl: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=60"
+                                        })}
+                                        className="text-[9px] bg-white hover:bg-amber-50 border border-slate-250 hover:border-amber-400 text-slate-700 hover:text-amber-950 font-bold px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                      >
+                                        + Mochila Executiva USB
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -4695,6 +4935,10 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                                 value={adminNewServiceForm.category}
                                 onChange={(e) => setAdminNewServiceForm({...adminNewServiceForm, category: e.target.value as any})}
                               >
+                                <option value="Venda de Terrenos">🏡 Venda de Terrenos</option>
+                                <option value="Venda de Casas">🏠 Venda de Casas</option>
+                                <option value="Venda de Carros">🚗 Venda de Carros</option>
+                                <option value="Serralharia & Metalurgia">🛠️ Serralharia & Metalurgia</option>
                                 <option value="Despacho Aduaneiro">Despacho Aduaneiro</option>
                                 <option value="Transporte de Carga">Transporte de Carga</option>
                                 <option value="Compra Assistida">Compra Assistida</option>
@@ -5215,14 +5459,25 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
 
             {/* Form B: Registar Nova Venda com Comissão */}
             <div className="bg-white border border-slate-150 p-5 rounded-3xl space-y-4 shadow-xs text-left">
-              <div className="flex items-center gap-2 border-b pb-3.5">
-                <div className="bg-amber-100 text-amber-800 p-2 rounded-xl">
-                  <Coins className="w-5 h-5 text-amber-600" />
+              <div className="flex items-center justify-between border-b pb-3.5 gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-amber-100 text-amber-800 p-2 rounded-xl">
+                    <Coins className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Registar Venda & Comissão</h4>
+                    <p className="text-[10px] text-slate-500 font-medium">Defina a percentagem em função do preço do bem do cliente</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800">Registar Venda & Comissão</h4>
-                  <p className="text-[10px] text-slate-400 font-medium">Lance o valor comercial, a comissão base e a percentagem acordada</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTierConfigModal(true)}
+                  className="text-[10.5px] font-bold text-slate-700 bg-slate-100 hover:bg-amber-100 hover:text-amber-900 px-3 py-1.5 rounded-xl border border-slate-250 flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                  title="Configurar tabela de percentagens por faixa de preço do bem"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Configurar Tabela de Preços</span>
+                </button>
               </div>
 
               <form onSubmit={handleAddColabSale} className="space-y-4 text-xs font-sans">
@@ -5234,13 +5489,16 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       value={newColabSaleForm.collaboratorId}
                       onChange={(e) => {
                         const targetCol = collaborators.find(c => c.id === e.target.value);
+                        const initialRate = isCalculationDynamic 
+                          ? getDynamicCommissionRate(newColabSaleForm.saleAmount) 
+                          : (targetCol ? targetCol.defaultCommissionPercentage : 10);
                         setNewColabSaleForm({ 
                           ...newColabSaleForm, 
                           collaboratorId: e.target.value,
-                          collaboratorPercentage: targetCol ? targetCol.defaultCommissionPercentage : newColabSaleForm.collaboratorPercentage 
+                          collaboratorPercentage: initialRate 
                         });
                       }}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700 font-semibold"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-250 rounded-xl focus:outline-hidden text-slate-800 font-semibold"
                     >
                       <option value="">-- Selecione o Colaborador --</option>
                       {collaborators.map(c => (
@@ -5256,142 +5514,222 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       required
                       value={newColabSaleForm.clientName}
                       onChange={(e) => setNewColabSaleForm({ ...newColabSaleForm, clientName: e.target.value })}
-                      placeholder="Nome do cliente trazido"
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700"
+                      placeholder="Ex: João Baptista Silva"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-250 rounded-xl focus:outline-hidden text-slate-800 font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Descrição do Negócio / Venda *</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    Bem / Mercadoria Necessária pelo Cliente *
+                  </label>
                   <input
                     type="text"
                     required
                     value={newColabSaleForm.saleDescription}
                     onChange={(e) => setNewColabSaleForm({ ...newColabSaleForm, saleDescription: e.target.value })}
-                    placeholder="Ex: Compra de Contentor Logístico em Luanda"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700"
+                    placeholder="Ex: Gerador 7.5kVA Diesel, 100 Sacos de Cimento, Perucas Virgens, Viatura Hilux"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-250 rounded-xl focus:outline-hidden text-slate-800 font-medium"
                   />
+                  <p className="text-[9.5px] text-slate-400 mt-1">Especifique o item exato solicitado pelo cliente.</p>
                 </div>
 
-                {/* Dynamic/Fixed calculation selector */}
-                <div className="space-y-2.5">
-                  <div className="bg-slate-50 border p-3 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                {/* Preços e Valores */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                      Preço do Bem / Valor Comercial (Kz) *
+                    </label>
+                    <input
+                      type="number"
+                      step="1000"
+                      min="1000"
+                      required
+                      value={newColabSaleForm.saleAmount}
+                      onChange={(e) => {
+                        const val = Math.max(1000, parseInt(e.target.value) || 0);
+                        const autoComm = Math.floor(val * 0.12);
+                        const newPercent = isCalculationDynamic ? getDynamicCommissionRate(val) : newColabSaleForm.collaboratorPercentage;
+                        setNewColabSaleForm({
+                          ...newColabSaleForm,
+                          saleAmount: val,
+                          commissionPrice: autoComm,
+                          collaboratorPercentage: newPercent
+                        });
+                      }}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-250 rounded-xl focus:outline-hidden text-slate-800 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                      Valor do Bem: {formatCurrency(newColabSaleForm.saleAmount)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                      Comissão Geral de Intermediação (Kz) *
+                    </label>
+                    <input
+                      type="number"
+                      step="500"
+                      min="100"
+                      required
+                      value={newColabSaleForm.commissionPrice}
+                      onChange={(e) => setNewColabSaleForm({ ...newColabSaleForm, commissionPrice: Math.max(100, parseInt(e.target.value) || 0) })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-250 rounded-xl focus:outline-hidden text-slate-800 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                      Honorários brutos: {formatCurrency(newColabSaleForm.commissionPrice)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Percentage Control Box with Manual & Tier Modes */}
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3.5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-b border-slate-200/80 pb-3">
                     <div>
-                      <span className="text-[10px] uppercase font-black text-slate-500 block">📊 Método de Comissão do Captador</span>
-                      <p className="text-[9.5px] text-slate-400">Determinar se a percentagem varia em função do preço do negócio.</p>
+                      <span className="text-[10.5px] uppercase font-black text-slate-800 flex items-center gap-1.5">
+                        <Percent className="w-3.5 h-3.5 text-amber-600" />
+                        Definição da Percentagem do Colaborador
+                      </span>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        A percentagem não é fixa: defina manualmente ou use as faixas de preço
+                      </p>
                     </div>
-                    <div className="flex bg-slate-200 p-0.5 rounded-lg shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCalculationDynamic(true);
-                          setNewColabSaleForm(prev => ({
-                            ...prev,
-                            collaboratorPercentage: getDynamicCommissionRate(prev.saleAmount)
-                          }));
-                        }}
-                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                          isCalculationDynamic 
-                          ? 'bg-amber-400 text-slate-950 shadow-xs' 
-                          : 'text-slate-600 hover:text-slate-950 font-semibold'
-                        }`}
-                      >
-                        🔀 Escalonável
-                      </button>
+
+                    {/* Mode Toggle Buttons */}
+                    <div className="flex bg-slate-200 p-0.5 rounded-xl shrink-0">
                       <button
                         type="button"
                         onClick={() => {
                           setIsCalculationDynamic(false);
                         }}
-                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
                           !isCalculationDynamic 
-                          ? 'bg-slate-800 text-white shadow-xs' 
-                          : 'text-slate-600 hover:text-slate-950 font-semibold'
+                          ? 'bg-slate-900 text-amber-400 shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-950 font-bold'
                         }`}
                       >
-                        📌 Padrão Fixo
+                        🎛️ Manual Livre
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCalculationDynamic(true);
+                          const dynamicRate = getDynamicCommissionRate(newColabSaleForm.saleAmount);
+                          setNewColabSaleForm(prev => ({
+                            ...prev,
+                            collaboratorPercentage: dynamicRate
+                          }));
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                          isCalculationDynamic 
+                          ? 'bg-amber-400 text-slate-950 shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-950 font-bold'
+                        }`}
+                      >
+                        📊 Tabela por Valor ({getDynamicCommissionRate(newColabSaleForm.saleAmount)}%)
                       </button>
                     </div>
                   </div>
 
+                  {/* Manual Quick Percentage Chips */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Atalhos Rápidos de Percentagem:
+                      </span>
+                      <span className="text-[10px] font-black font-mono text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                        {newColabSaleForm.collaboratorPercentage}% Definido
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {[5, 8, 10, 12, 15, 18, 20, 25, 30].map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => {
+                            setIsCalculationDynamic(false);
+                            setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: pct });
+                          }}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            newColabSaleForm.collaboratorPercentage === pct
+                              ? 'bg-amber-400 text-slate-950 font-black shadow-xs ring-2 ring-amber-400/40'
+                              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-250'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Slider & Direct Numerical Input */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center pt-1">
+                    <div className="sm:col-span-8">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={newColabSaleForm.collaboratorPercentage}
+                        onChange={(e) => {
+                          setIsCalculationDynamic(false);
+                          setNewColabSaleForm({
+                            ...newColabSaleForm,
+                            collaboratorPercentage: parseInt(e.target.value) || 0
+                          });
+                        }}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+                    <div className="sm:col-span-4 flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={newColabSaleForm.collaboratorPercentage === 0 ? '' : newColabSaleForm.collaboratorPercentage}
+                        onChange={(e) => {
+                          setIsCalculationDynamic(false);
+                          const val = e.target.value;
+                          if (val === '') {
+                            setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: 0 });
+                          } else {
+                            const parsed = parseInt(val, 10);
+                            setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)) });
+                          }
+                        }}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-xl font-mono font-black text-amber-900 text-center text-xs focus:outline-hidden"
+                      />
+                      <span className="text-xs font-bold text-slate-500">%</span>
+                    </div>
+                  </div>
+
                   {isCalculationDynamic && (
-                    <div className="bg-amber-50/75 border border-amber-100 p-3.5 rounded-2xl text-[9.5px] text-slate-700 leading-normal font-semibold">
-                      <span className="text-amber-700 font-extrabold uppercase block mb-1">💡 Tabela de Escalonamento Dinâmico Activa:</span>
-                      <div className="grid grid-cols-2 gap-2 text-slate-600 font-medium">
-                        <div>• Vendas &lt; 300 Mil Kz: <span className="font-extrabold text-amber-600">8%</span></div>
-                        <div>• Vendas 300 Mil ~ 1M Kz: <span className="font-extrabold text-amber-600">12%</span></div>
-                        <div>• Vendas 1M ~ 3M Kz: <span className="font-extrabold text-amber-600">15%</span></div>
-                        <div>• Vendas &gt; 3M Kz: <span className="font-extrabold text-amber-600">18%</span></div>
-                      </div>
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[10px] text-amber-950 flex items-center justify-between">
+                      <span>💡 Faixa calculada para {formatCurrency(newColabSaleForm.saleAmount)}:</span>
+                      <span className="font-mono font-black text-amber-800">
+                        {getTierForPrice(newColabSaleForm.saleAmount, commissionTiers).label} → {newColabSaleForm.collaboratorPercentage}%
+                      </span>
                     </div>
                   )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Preço da Venda (Kz)</label>
-                    <input
-                      type="number"
-                      step="1000"
-                      min="1000"
-                      value={newColabSaleForm.saleAmount}
-                      onChange={(e) => {
-                        const val = Math.max(1000, parseInt(e.target.value) || 0);
-                        const dynamicPercent = isCalculationDynamic ? getDynamicCommissionRate(val) : newColabSaleForm.collaboratorPercentage;
-                        setNewColabSaleForm({
-                          ...newColabSaleForm,
-                          saleAmount: val,
-                          collaboratorPercentage: dynamicPercent
-                        });
-                      }}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Preço de Comissão (Kz) *</label>
-                    <input
-                      type="number"
-                      step="500"
-                      min="100"
-                      value={newColabSaleForm.commissionPrice}
-                      onChange={(e) => setNewColabSaleForm({ ...newColabSaleForm, commissionPrice: Math.max(100, parseInt(e.target.value) || 0) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden text-slate-700 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Percentagem (%) *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={newColabSaleForm.collaboratorPercentage === 0 ? '' : newColabSaleForm.collaboratorPercentage}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: 0 });
-                        } else {
-                          const parsed = parseInt(val, 10);
-                          setNewColabSaleForm({ ...newColabSaleForm, collaboratorPercentage: isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed)) });
-                        }
-                      }}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden font-black text-slate-750"
-                    />
-                  </div>
                 </div>
 
                 {/* Realtime calculations preview block */}
                 {(() => {
                   const commVal = Math.floor(newColabSaleForm.commissionPrice * (newColabSaleForm.collaboratorPercentage / 100));
                   return (
-                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-slate-800">
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-800">
                       <div>
-                        <p className="text-[9px] uppercase font-bold text-slate-400">Ganhos do Colaborador (Cálculo em Tempo Real):</p>
-                        <p className="text-[10px] text-slate-500 leading-normal">Fórmula: {formatCurrency(newColabSaleForm.commissionPrice)} comissão geral × {newColabSaleForm.collaboratorPercentage}%</p>
+                        <span className="text-[9.5px] uppercase font-black text-emerald-800 tracking-wider block">
+                          Ganho Líquido a Pagar ao Colaborador:
+                        </span>
+                        <p className="text-[10.5px] text-emerald-700 mt-0.5">
+                          {newColabSaleForm.collaboratorPercentage}% sobre {formatCurrency(newColabSaleForm.commissionPrice)} de honorários
+                        </p>
                       </div>
-                      <span className="font-mono text-xs font-black text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200">
+                      <span className="font-mono text-sm font-black text-emerald-900 bg-white px-3.5 py-2 rounded-xl border border-emerald-200 shadow-xs self-start sm:self-auto">
                         + {formatCurrency(commVal)}
                       </span>
                     </div>
@@ -5400,9 +5738,9 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-slate-900 text-amber-400 hover:bg-slate-800 text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all active:scale-98 flex items-center justify-center gap-2 shadow-xs"
+                  className="w-full py-3 bg-slate-900 text-amber-400 hover:bg-slate-800 text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all active:scale-98 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <Coins className="w-3.5 h-3.5" />
+                  <Coins className="w-4 h-4" />
                   <span>Registar Negócio e Deduzir Comissão 💰</span>
                 </button>
               </form>
@@ -5432,6 +5770,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                     <th className="p-3.5 text-center">Vendas Concluídas</th>
                     <th className="p-3.5 text-right">Comissões Pagas</th>
                     <th className="p-3.5">Data de Registo</th>
+                    <th className="p-3.5 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-705">
@@ -5451,7 +5790,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       <td className="p-3.5">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-950 text-amber-400 font-extrabold flex items-center justify-center shrink-0 uppercase text-[10px]">
-                            {c.name.substring(0, 2)}
+                            {(c?.name || 'CB').substring(0, 2)}
                           </div>
                           <div>
                             <p className="font-extrabold text-slate-800">{c.name}</p>
@@ -5479,6 +5818,17 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       </td>
                       <td className="p-3.5 text-slate-404 text-[10.5px]">
                         {new Date(c.joinedAt).toLocaleDateString('pt-AO')}
+                      </td>
+                      <td className="p-3.5 text-center" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCollaborator(c)}
+                          className="px-2.5 py-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 mx-auto cursor-pointer transition-all active:scale-95"
+                          title="Editar colaborador"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -5509,7 +5859,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-full bg-amber-400 text-slate-950 font-black flex items-center justify-center text-xl shrink-0 border-2 border-slate-800 shadow-sm">
-                      {colab.name.substring(0, 2).toUpperCase()}
+                      {(colab?.name || 'CB').substring(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -5848,6 +6198,14 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                       </td>
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingColabSale(s)}
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg cursor-pointer transition-all w-8 h-8 flex items-center justify-center font-bold"
+                            title="Editar comissão, valor do bem ou percentagem do negócio"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => downloadCollaboratorSaleInvoice(s)}
@@ -7305,8 +7663,8 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
                 <div className="absolute left-6 top-5 bottom-5 w-0.5 bg-slate-100" id="step-connector-pipeline"></div>
                 
                 <div className="space-y-4 relative">
-                  {trackingSteps.map((step, idx) => {
-                    const currentIdx = getCurrentStatusIndex(trackingModalOrder.status);
+                  {getTrackingSteps(trackingModalOrder).map((step, idx) => {
+                    const currentIdx = getCurrentStatusIndex(trackingModalOrder.status, trackingModalOrder);
                     const isDone = idx < currentIdx;
                     const isCurrent = idx === currentIdx;
                     const isPending = idx > currentIdx;
@@ -7364,7 +7722,7 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
 
                           {isCurrent && idx === 6 && (
                             <div className="mt-2 p-2 bg-sky-50/50 border border-sky-100 rounded-xl text-[10px] text-slate-500">
-                              <p>🏢 <strong className="text-sky-700">Entrada Física:</strong> A mercadoria deu entrada oficial no Porto de Cabinda e está a ser triada para faturamento alfandegário.</p>
+                              <p>🏢 <strong className="text-sky-700">Entrada Física:</strong> A mercadoria deu entrada oficial no {trackingModalOrder.routeDirection === 'Cabinda-Luanda' ? 'Porto de Luanda / Depósito Central' : 'Porto de Cabinda'} e está a ser triada para faturamento alfandegário.</p>
                             </div>
                           )}
                         </div>
@@ -7585,17 +7943,17 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
              {/* Logistics section */}
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-left">
                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Origem em Luanda</p>
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Origem em {activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Cabinda' : 'Luanda'}</p>
                  <p className="font-extrabold text-slate-800">{activeOrder.supplierName || 'Polo Geral Mediador'}</p>
                  <p className="text-[10px] text-slate-500"><strong>Contacto:</strong> {activeOrder.supplierPhone || '+244 912 000 111'}</p>
-                 <p className="text-[10px] text-slate-500"><strong>Despacho:</strong> Porto de Luanda, Terminal de Cabotagem Sogester</p>
+                 <p className="text-[10px] text-slate-500"><strong>Despacho:</strong> {activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Porto de Cabinda, Cais de Cabotagem' : 'Porto de Luanda, Terminal de Cabotagem Sogester'}</p>
                </div>
 
                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Destino em Cabinda</p>
+                 <p className="text-[7px] font-black uppercase text-slate-400 tracking-wider">Destino em {activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Luanda' : 'Cabinda'}</p>
                  <p className="font-extrabold text-slate-800">{activeOrder.clientName}</p>
                  <p className="text-[10px] text-slate-500"><strong>Telemóvel:</strong> {activeOrder.clientPhone}</p>
-                 <p className="text-[10px] text-slate-500"><strong>Entrega:</strong> {activeOrder.deliveryOption === 'domicilio' ? activeOrder.deliveryAddress : 'Polo Geral Mediador (Rua da Amizade, Cabinda Central)'}</p>
+                 <p className="text-[10px] text-slate-500"><strong>Entrega:</strong> {activeOrder.deliveryOption === 'domicilio' ? activeOrder.deliveryAddress : (activeOrder.routeDirection === 'Cabinda-Luanda' ? 'Polo Geral Mediador (Luanda Central)' : 'Polo Geral Mediador (Rua da Amizade, Cabinda Central)')}</p>
                  <p className="text-[10px] text-slate-500"><strong>Vetor Reservado:</strong> {activeOrder.shippingCarrier || 'Carga Convencional'}</p>
                </div>
              </div>
@@ -8392,6 +8750,289 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
 
           </div>
         </div>
+      )}
+
+      {/* ADMIN EDIT ORDER & ROUTE MODAL */}
+      {isEditingOrderModalOpen && activeOrder && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden my-8 animate-in fade-in duration-200 text-slate-100">
+            <div className="bg-slate-950 p-6 border-b border-slate-800 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-lg">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Editar Detalhes do Pedido e Rota</h3>
+                  <p className="text-xs text-slate-400">ID da Encomenda: <strong className="text-amber-400 font-mono">{activeOrder.id}</strong> • Cliente: {activeOrder.clientName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingOrderModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-black transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedOrder} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              
+              {/* ROTA SELECTION */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-3">
+                <label className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                  <span>🔄</span> Direção da Rota de Transporte
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditOrderForm(prev => ({ ...prev, routeDirection: 'Luanda-Cabinda' }))}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                      editOrderForm.routeDirection === 'Luanda-Cabinda'
+                        ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">🏙️➔🌴</span>
+                    <div>
+                      <p className="text-xs font-black uppercase">Luanda ➔ Cabinda</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Compras na Capital e Lojas enviadas para Cabinda</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditOrderForm(prev => ({ ...prev, routeDirection: 'Cabinda-Luanda' }))}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                      editOrderForm.routeDirection === 'Cabinda-Luanda'
+                        ? 'bg-purple-950/60 border-purple-500 text-purple-300 ring-2 ring-purple-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">🌴➔🏙️</span>
+                    <div>
+                      <p className="text-xs font-black uppercase">Cabinda ➔ Luanda</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Expedição de Artigos de Cabinda para Luanda</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* PRODUCT DETAILS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Nome do Produto / Descrição</label>
+                  <input
+                    type="text"
+                    required
+                    value={editOrderForm.productName}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, productName: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Gerador 5KVA a Gasóleo ou Caixas de Peixe Seco"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Código de Referência / SKU</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.productCode}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, productCode: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono focus:border-amber-400 focus:outline-none uppercase"
+                    placeholder="Ex: PRD-001"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Quantidade (Unidades)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editOrderForm.quantity}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Local de Origem / Fornecedor</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.originLocation}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, originLocation: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Mercado dos Congolenses (Luanda) ou Cacongo (Cabinda)"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Local de Destino / Armazém</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.destinationLocation}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, destinationLocation: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Armazém C-4 Porto de Cabinda ou Viana Luanda"
+                  />
+                </div>
+              </div>
+
+              {/* STATUS & NOTES */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Estado Logístico Atual</label>
+                  <select
+                    value={editOrderForm.status}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, status: e.target.value as OrderStatus }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-bold focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="RECEBIDO">1. Pedido Registado</option>
+                    <option value="ANALISE">2. Em Análise Aduaneira</option>
+                    <option value="ORCADO">3. Orçamento Pronto</option>
+                    <option value="PAGO">4. Pagamento Confirmado</option>
+                    <option value="COMPRADO">5. Mercadoria Adquirida</option>
+                    <option value="TRANSPORTE">6. Em Trânsito de Cabotagem</option>
+                    <option value="CABINDA">7. Chegado ao Destino</option>
+                    <option value="LEVANTAMENTO">8. Pronto p/ Levantamento</option>
+                    <option value="ENTREGUE">9. Entregue com Sucesso</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Previsão de Entrega</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.estimateDeliveryDate}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, estimateDeliveryDate: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: 48 horas / 14 de Agosto"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Observações Operacionais / Notas do Cliente</label>
+                  <textarea
+                    rows={2}
+                    value={editOrderForm.notes}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Instruções de acondicionamento, empacotamento ou contacto secundário..."
+                  />
+                </div>
+              </div>
+
+              {/* BUDGET & FINANCIALS */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-3">
+                <label className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                  <span>💰</span> Valores e Orçamento Comercial (AOA)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 font-bold">Preço Base Artigo</label>
+                    <input
+                      type="number"
+                      value={editOrderForm.budgetRawPrice}
+                      onChange={e => setEditOrderForm(prev => ({ ...prev, budgetRawPrice: parseFloat(e.target.value) || 0 }))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-400 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 font-bold">Frete Transporte</label>
+                    <input
+                      type="number"
+                      value={editOrderForm.budgetShipping}
+                      onChange={e => setEditOrderForm(prev => ({ ...prev, budgetShipping: parseFloat(e.target.value) || 0 }))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-400 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 font-bold">Taxa Despacho AGT</label>
+                    <input
+                      type="number"
+                      value={editOrderForm.dispatchFee}
+                      onChange={e => setEditOrderForm(prev => ({ ...prev, dispatchFee: parseFloat(e.target.value) || 0 }))}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-400 focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARRIER & GUIDE */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Transportadora / Navio</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.shippingCarrier}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, shippingCarrier: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-400 focus:outline-none"
+                    placeholder="Ex: Secil Marítima / TAAG Cargo"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Número da Guia de Transporte AGT</label>
+                  <input
+                    type="text"
+                    value={editOrderForm.shippingGuideNumber}
+                    onChange={e => setEditOrderForm(prev => ({ ...prev, shippingGuideNumber: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-400 font-mono focus:border-amber-400 focus:outline-none uppercase"
+                    placeholder="Ex: AGT-2026-998"
+                  />
+                </div>
+              </div>
+
+              {/* MODAL FOOTER BUTTONS */}
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingOrderModalOpen(false)}
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-2"
+                >
+                  <span>💾</span>
+                  <span>Gravar Alterações e Notificar Cliente</span>
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* COMMISSION TIERS CONFIGURATION MODAL */}
+      <CommissionTiersModal
+        isOpen={showTierConfigModal}
+        onClose={() => setShowTierConfigModal(false)}
+        tiers={commissionTiers}
+        onSaveTiers={handleSaveTiers}
+        onResetTiers={handleResetTiers}
+        formatCurrency={formatCurrency}
+      />
+
+      {/* EDIT COLLABORATOR SALE MODAL */}
+      {editingColabSale && (
+        <EditCollaboratorSaleModal
+          sale={editingColabSale}
+          collaborators={collaborators}
+          tiers={commissionTiers}
+          onClose={() => setEditingColabSale(null)}
+          onSave={handleUpdateColabSale}
+          formatCurrency={formatCurrency}
+        />
+      )}
+
+      {/* EDIT COLLABORATOR PROFILE MODAL */}
+      {editingCollaborator && (
+        <EditCollaboratorModal
+          collaborator={editingCollaborator}
+          onClose={() => setEditingCollaborator(null)}
+          onSave={handleUpdateCollaborator}
+        />
       )}
 
     </div>

@@ -84,6 +84,9 @@ export default function ProductDetailsModal({
   };
 
   const handleConfirmDirectBuy = () => {
+    const isCabindaOrigin = (product.location || supplier?.city || supplier?.addressHidden || '').toLowerCase().includes('cabinda');
+    const routeDirection = isCabindaOrigin ? 'Cabinda-Luanda' : 'Luanda-Cabinda';
+
     onCreateDirectOrder({
       productId: product.id,
       productCode: code,
@@ -91,7 +94,10 @@ export default function ProductDetailsModal({
       quantity,
       supplierName: supplier?.name || 'Fornecedor Homologado',
       supplierPhone: supplier?.phoneHidden || '+244 924 111 222',
-      supplierLocation: product.location || 'Luanda',
+      supplierLocation: product.location || supplier?.city || supplier?.addressHidden || (isCabindaOrigin ? 'Cabinda' : 'Luanda'),
+      routeDirection,
+      originCity: isCabindaOrigin ? 'Cabinda' : 'Luanda',
+      destinationCity: isCabindaOrigin ? 'Luanda' : 'Cabinda',
       productPhotoUrl: product.photoUrl,
       notes: orderNotes ? `[Compra Direta SKU: ${code}] ${orderNotes}` : `Compra Direta de artigo homologado ${code} - ${product.name}`,
       budgetRawPrice: itemSubtotal,
@@ -102,7 +108,9 @@ export default function ProductDetailsModal({
       totalAmount: grandTotal,
       paid: false,
       deliveryOption,
-      deliveryAddress: deliveryOption === 'domicilio' ? (deliveryAddress || 'Cabinda') : 'Balcão Armazém C-4, Porto Comercial de Cabinda',
+      deliveryAddress: deliveryOption === 'domicilio' 
+        ? (deliveryAddress || (isCabindaOrigin ? 'Luanda' : 'Cabinda')) 
+        : (isCabindaOrigin ? 'Balcão / Depósito Central de Luanda' : 'Balcão Armazém C-4, Porto Comercial de Cabinda'),
       status: 'RECEBIDO',
       pointsEarned: Math.round(itemSubtotal / 1000)
     });

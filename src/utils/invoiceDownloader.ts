@@ -328,14 +328,14 @@ export const downloadOrderInvoice = (order: Order, clientTier: string = 'Standar
             <h3>Remetente / Origem das Cargas</h3>
             <p><strong>Fornecedor Central:</strong> ${order.supplierName || 'Polo Parceiro Geral'}</p>
             <p><strong>Telemóvel:</strong> ${order.supplierPhone || '+244 912 000 111'}</p>
-            <p><strong>Polo de Saída:</strong> ${order.supplierLocation?.toLowerCase().includes('cabinda') ? 'Porto de Cabinda, Cais de Cabotagem' : 'Porto de Luanda, Terminal Especial Sogester'}</p>
-            <p><strong>Cidade:</strong> ${order.supplierLocation || 'Luanda'}, Angola</p>
+            <p><strong>Polo de Saída:</strong> ${order.supplierLocation?.toLowerCase().includes('cabinda') || order.routeDirection === 'Cabinda-Luanda' ? 'Porto de Cabinda, Cais de Cabotagem' : 'Porto de Luanda, Terminal Especial Sogester'}</p>
+            <p><strong>Cidade:</strong> ${order.originCity || (order.routeDirection === 'Cabinda-Luanda' ? 'Cabinda' : 'Luanda')}, Angola</p>
           </div>
           <div class="grid-col">
             <h3>Destinatário / Encomenda</h3>
             <p><strong>Cliente:</strong> ${order.clientName}</p>
             <p><strong>Telemóvel:</strong> ${order.clientPhone}</p>
-            <p><strong>Local de Entrega:</strong> ${order.deliveryOption === 'domicilio' ? order.deliveryAddress : 'Polo de Levantamento Geral (' + (order.supplierLocation?.toLowerCase().includes('cabinda') ? 'Luanda' : 'Cabinda') + ' Central)'}</p>
+            <p><strong>Local de Entrega:</strong> ${order.deliveryOption === 'domicilio' ? order.deliveryAddress : 'Polo de Levantamento Geral (' + (order.destinationCity || (order.routeDirection === 'Cabinda-Luanda' ? 'Luanda' : 'Cabinda')) + ' Central)'}</p>
             <p><strong>Status de Pagamento:</strong> ${order.paid ? 'LIQUIDADO (Pago via Multicaixa/IBAN)' : 'PENDENTE DE COBRANÇA'}</p>
           </div>
         </div>

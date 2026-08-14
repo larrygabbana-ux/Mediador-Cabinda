@@ -69,7 +69,7 @@ export default function MarketplaceHeroBanner({
                 <SunMedium className="w-5 h-5" />
               </div>
               <div className="overflow-hidden">
-                <h4 className="text-xs font-bold text-white group-hover:text-amber-300 truncate">Energia Solar & Geradores</h4>
+                <h4 className="text-xs font-bold text-white group-hover:text-amber-300 truncate">Energia Solar</h4>
                 <p className="text-[10px] text-slate-400">Painéis Tier-1 & Grupos Diesel</p>
               </div>
             </div>

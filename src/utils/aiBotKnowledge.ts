@@ -269,6 +269,101 @@ Ao submeter a cotação no aplicativo, pode escolher a modalidade de sua prefer�
     updatedBy: 'Sistema Oficial'
   },
   {
+    id: 'produtos-tipicos-cabinda-luanda',
+    category: 'produtos',
+    question: 'Como pedir produtos típicos de Cabinda (Xikuanga, Fumba, Kitáboa, Banana Pão, Óleo de Palma) para Luanda ou outras províncias?',
+    keywords: [
+      'xikuanga',
+      'chikuanga',
+      'fumba',
+      'kitaboa',
+      'kitáboa',
+      'banana pao',
+      'banana pão',
+      'oleo de palma',
+      'óleo de palma',
+      'maiombe',
+      'bombo seco',
+      'bombó seco',
+      'farinha de mandioca',
+      'pedir de cabinda',
+      'comprar de cabinda para luanda'
+    ],
+    shortAnswer: 'Pode encomendar diretamente pelo Marketplace ou criar um Pedido Personalizado. Enviamos Xikuanga fresca, Fumba do Maiombe, Kitáboa, Banana Pão e Óleo de Palma para Luanda e todas as províncias.',
+    detailedAnswer: `Sim! O **Mediador Cabinda** envia produtos alimentares tradicionais e frescos de Cabinda diretamente para clientes e famílias residentes em **Luanda, Benguela, Huambo, Huíla e todas as províncias**:
+
+🌿 **Produtos Tradicionais de Cabinda Disponíveis no App:**
+• **Xikuanga Tradicional Genuína:** Embalada em folha de bananeira fresca (pacotes de 10 unidades).
+• **Fumba do Maiombe:** Folhas seleccionadas, frescas ou desidratadas para Moamba autêntica.
+• **Banana Pão & Kitáboa:** Cachos frescos selecionados direto das lavras agrícolas de Cabinda.
+• **Óleo de Palma Puro do Maiombe:** 100% natural, não refinado, em bidões de 20L ou garrafas de 5L.
+• **Bombó Seco & Farinha Fina:** Mandioca crocante e farinha de primeira qualidade.
+
+✈️ **Logística de Envio Rápido:**
+• Para alimentos frescos e perecíveis, utilizamos transporte aéreo TAAG Cargo (1 dia) ou marítimo refrigerado, garantindo frescura máxima até ao destino em Luanda (Viana/Parque Logístico ou entrega ao domicílio).`,
+    suggestedNextQuestions: [
+      'Como ver os produtos de Cabinda no Marketplace?',
+      'Qual o valor do frete para Luanda?',
+      'Como fazer um pedido personalizado?'
+    ],
+    actionLink: {
+      label: 'Ver Alimentos no Marketplace',
+      view: 'marketplace',
+      icon: '🌾'
+    },
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'intermediacao-fornecedor-proprio-fotos',
+    category: 'servicos',
+    question: 'Como funciona a intermediação quando eu tenho meu próprio fornecedor e envio fotos da galeria no chat?',
+    keywords: [
+      'meu fornecedor',
+      'fornecedor proprio',
+      'fornecedor próprio',
+      'fornecedor externo',
+      'tenho fornecedor',
+      'comprar com meu fornecedor',
+      'foto da galeria',
+      'foto do produto',
+      'foto do fornecedor',
+      'anexar foto',
+      'intermediar negocio',
+      'intermediar negócio',
+      'seguranca contra burla',
+      'segurança contra burla',
+      'evitar burla',
+      'compra segura fornecedor',
+      'validar fornecedor'
+    ],
+    shortAnswer: 'Sim! Se encontrou um fornecedor em Luanda ou outra província, envie a foto do produto/proforma no chat. O Mediador Cabinda faz a vistoria física presencial, garante custódia segura contra burlas, emite Guia AGT e despacha com segurança total.',
+    detailedAnswer: `Sim, com certeza! O **Mediador Cabinda Lda** é especialista na **Intermediação Segura de Fornecedores Próprios do Cliente** (quando você já tem o contacto de um fornecedor em Luanda, Benguela ou outra região, mas quer proteger o seu dinheiro contra burlas financeiras, fraudes de internet ou mercadorias com defeito):
+
+🛡️ **Como Funciona a Intermediação Segura com o Seu Fornecedor:**
+1. 📸 **Envio de Fotos e Detalhes:** Pode anexar fotos da sua galeria (produto, cartão de visita, orçamento ou fatura pro-forma do seu fornecedor) diretamente aqui no Chatbot ou no formulário de pedido.
+2. 🏬 **Vistoria Física Presencial em Luanda:** A nossa equipa operacional desloca-se presencialmente às instalações ou bancada do seu fornecedor (Mercado de São Paulo, Kikolo, Viana, Talatona, armazéns, etc.) para inspecionar, fotografar e testar a mercadoria física.
+3. 🔒 **Custódia Segura do Pagamento (Proteção Total Anti-Burla):** Você transfere para a conta oficial do Mediador Cabinda (Multicaixa Express ou IBAN). **O fornecedor só recebe o pagamento depois de a nossa equipa ter a mercadoria física conferida nas mãos com fatura legal com NIF.**
+4. 📄 **Legalização e Guia de Trânsito AGT:** Cuidamos de todo o desembaraço fiscal para transporte interprovincial legal sem risco de apreensão.
+5. 🚢 **Embalamento e Transporte Protegido:** Carga etiquetada com código **MED-XXXX** e despachada via Aérea (TAAG Cargo) ou Cabotagem Marítima com garantia de 100% de reembolso integral.
+
+👉 Pode clicar no botão abaixo para **Criar Pedido de Intermediação com o seu Fornecedor** e anexar as fotos!`,
+    suggestedNextQuestions: [
+      'Como criar o pedido com o meu fornecedor agora?',
+      'Quais são as taxas de intermediação e vistoria?',
+      'Como funciona a garantia de 100% de reembolso?'
+    ],
+    actionLink: {
+      label: 'Pedir Intermediação de Fornecedor',
+      view: 'fazer-pedido',
+      icon: '🛡️'
+    },
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
     id: 'custos-taxas-tarifas',
     category: 'custos',
     question: 'Como são calculados os custos, tarifas, comissões e taxas aduaneiras?',
@@ -719,6 +814,279 @@ Ao constatar as severas dificuldades estruturais enfrentadas pelas famílias e e
     isActive: true,
     lastUpdated: new Date().toISOString(),
     updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'venda-terrenos-casas-carros',
+    category: 'servicos',
+    question: 'O Mediador Cabinda realiza a venda de terrenos, casas e carros?',
+    keywords: [
+      'terreno',
+      'terrenos',
+      'venda de terrenos',
+      'comprar terreno',
+      'casa',
+      'casas',
+      'venda de casas',
+      'comprar casa',
+      'moradia',
+      'carro',
+      'carros',
+      'venda de carros',
+      'comprar carro',
+      'veiculo',
+      'viatura',
+      'automovel',
+      'imobiliario',
+      'imoveis'
+    ],
+    shortAnswer: 'Sim! No menu "Consultar Serviços 🛠️" pode consultar terrenos legalizados, casas em Luanda e Cabinda, e viaturas novas ou seminovas intermediadas com segurança.',
+    detailedAnswer: `Sim! O Mediador Cabinda expandiu o seu catálogo oficial para incluir serviços imobiliários e automóveis intermediados com segurança jurídica e fiscal:
+
+🏡 **1. Venda de Terrenos Legalizados:**
+• Terrenos loteados em Luanda (ex: Zango/Viana) e Cabinda (ex: Yabi) com Direito de Superfície e Croquis de Localização.
+
+🏠 **2. Venda de Casas & Moradias:**
+• Imóveis prontos a habitar, moradias T3/T4 em condomínio ou centro urbano em Luanda e Cabinda.
+
+🚗 **3. Venda de Carros & Viaturas:**
+• Veículos novos (0 km) e seminovos certificados (Toyota Hilux, Hyundai, Suzuki Jimny, etc.) com vistoria prévia e opções de embarque prioritário para Cabinda.
+
+Aceda à aba **"Consultar Serviços 🛠️"** no menu principal do aplicativo para ver todas as fotos, preços de referência e solicitar a sua intermediação!`,
+    suggestedNextQuestions: [
+      'Como solicitar a intermediação para compra de um imóvel ou carro?',
+      'Onde fica o catálogo de serviços no aplicativo?',
+      'Falar com a equipa no WhatsApp (+244 942 043 293)'
+    ],
+    actionLink: {
+      label: 'Consultar Serviços',
+      view: 'solicitar-servico',
+      icon: '🏡'
+    },
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'prazo-exato-destino',
+    category: 'prazos',
+    question: 'Qual é o prazo exato de entrega para a província de destino?',
+    keywords: ['prazo exato', 'qual o prazo exato', 'dias exatos', 'data exata', 'prazo exato de entrega'],
+    shortAnswer: 'O prazo depende da rota e modalidade. Se o prazo não estiver cadastrado, a IA encaminha para a equipa.',
+    detailedAnswer: `O prazo de entrega depende da rota, do tipo de transporte e das condições definidas para a sua carga.
+
+Atualmente, para as rotas gerais cadastradas no sistema:
+• ✈️ **Via Aérea:** Previsão média de **${DEFAULT_LOGISTICS_CONFIG.modes.aereo.averageTime}**
+• 🚢 **Via Marítima:** Previsão média de **${DEFAULT_LOGISTICS_CONFIG.modes.maritimo.averageTime}**
+• 🚚 **Via Terrestre:** Previsão média de **${DEFAULT_LOGISTICS_CONFIG.modes.terrestre.averageTime}**
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Quando o prazo oficial estiver cadastrado no sistema para a sua rota, este será informado com base nos dados registrados. Se o sistema não possuir um prazo oficial para aquela rota:
+«“O prazo exato para esta rota precisa de ser confirmado pela nossa equipa. Por favor, consulte um atendente humano para obter a previsão correta. Não queremos fornecer uma estimativa que possa estar incorreta.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Quais são os prazos médios de entrega?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'taxas-retirada-entrega-domicilio',
+    category: 'custos',
+    question: 'Os valores incluem taxas de retirada e entrega ao domicílio ou só de armazém para armazém?',
+    keywords: ['inclui entrega ao domicilio', 'taxa de retirada', 'armazem para armazem', 'balcao para balcao', 'so de armazem', 'retirada e entrega ao domicilio', 'incluem taxas de retirada'],
+    shortAnswer: 'Depende da tarifa contratada. O levantamento no Armazém C-4 é gratuito. A entrega ao domicílio depende da opção selecionada.',
+    detailedAnswer: `Isso depende da tarifa e do serviço contratado para o seu pedido:
+
+• **Levantamento no Armazém/Balcão Oficial (Armazém C-4 em Cabinda ou Parque Logístico em Luanda):** Já está incluído na tarifa base do serviço.
+• **Entrega ao Domicílio / Retirada no Local do Fornecedor:** Depende da opção selecionada no seu orçamento ou da distância do local.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se não houver informação oficial cadastrada no seu pedido:
+«“A inclusão das taxas de retirada e entrega ao domicílio depende do serviço contratado. Para confirmar o que está incluído no seu valor, consulte a nossa equipa ou um atendente humano.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Onde fica o armazém de retirada em Cabinda?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'cobranca-peso-volume-cubagem',
+    category: 'custos',
+    question: 'Existe cobrança por peso ou por volume (cubagem)?',
+    keywords: ['cobranca por peso', 'cobranca por volume', 'cubagem', 'peso ou volume', 'por peso ou por volume', 'calculo do frete'],
+    shortAnswer: 'Aérea por kg; Marítima por peso (kg) ou volume (m³), aplicando-se o maior fator comercial.',
+    detailedAnswer: `A forma de cálculo depende da tabela de preços e das regras da transportadora:
+
+• **Via Aérea:** Cálculo efetuado por **peso bruto em quilogramas (kg)** ou peso taxável.
+• **Via Marítima:** Cálculo efetuado por **peso (kg) ou volume/cubagem em metros cúbicos (m³)**, aplicando-se a regra do maior fator comercial.
+• **Cargas em Contentor:** Calculadas por volume de ocupação ou quantidade de volumes.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se não houver regra cadastrada para a sua mercadoria:
+«“O método de cálculo para esta carga precisa de ser confirmado pela nossa equipa. Um atendente poderá verificar o peso, as dimensões e o tipo de mercadoria para determinar o valor correto.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Quais são os custos e taxas de frete?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'taxas-ocultas-armazenagem',
+    category: 'custos',
+    question: 'Há taxas ocultas, como armazenagem se a carga demorar a ser retirada?',
+    keywords: ['taxas ocultas', 'taxa de armazenagem', 'taxa de armazenamento', 'demorar a retirar', 'demorar a levantar', 'multa de armazenagem'],
+    shortAnswer: 'Não há taxas ocultas. Há tolerância gratuita de armazenagem, aplicada taxa diária apenas após o período limite.',
+    detailedAnswer: `O Mediador Cabinda opera com 100% de transparência e **não possui taxas ocultas**.
+
+• **Armazenagem:** O cliente dispõe de um período de carência gratuito após a notificação de chegada ao Armazém C-4. Se a carga permanecer no armazém após o período limite, poderão aplicar-se tarifas diárias de armazenagem para gestão de espaço portuário.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se não houver informação oficial cadastrada para o seu caso:
+«“Não tenho informação oficial cadastrada sobre eventual cobrança de armazenagem para este caso. Para evitar fornecer uma informação incorreta, consulte a nossa equipa ou um atendente humano.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Onde fica o Armazém C-4 em Cabinda?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'seguro-carga-cobertura',
+    category: 'segurança',
+    question: 'A agência oferece seguro de carga contra roubo, perda ou danos?',
+    keywords: ['oferece seguro', 'seguro de carga', 'contra roubo', 'perda ou danos', 'cobertura de seguro', 'tem seguro'],
+    shortAnswer: 'Sim. Oferecemos Garantia de Proteção de Carga com 100% de reembolso em caso comprovado de dano ou extravio.',
+    detailedAnswer: `Sim! O Mediador Cabinda oferece a **Garantia de Proteção de Carga e Reembolso Integral**:
+
+• **Garantia do Mediador Cabinda:** Em caso comprovado de dano estrutural sofrido no trânsito, perda ou extravio durante o transporte regular, é garantida a devolução de **100% do valor pago** ou a substituição imediata por outro artigo idêntico.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se o seu envio exigir apólice individual ou condições especiais de seguro não cadastradas:
+«“As condições de seguro da carga precisam de ser confirmadas pela nossa equipa. Por favor, consulte um atendente humano antes de efetuar o envio.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'O seguro já está incluso no valor do frete?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'seguro-incluso-ou-a-parte',
+    category: 'segurança',
+    question: 'O seguro já está incluso no valor do frete ou precisa ser pago à parte?',
+    keywords: ['seguro esta incluso', 'seguro ja incluso', 'seguro pago a parte', 'seguro cobrado a parte', 'seguro esta incluido'],
+    shortAnswer: 'A proteção regular contra avarias/extravios com reembolso de 100% já está incluída na tarifa e comissão.',
+    detailedAnswer: `Na tarifa padrão e comissão de intermediação do Mediador Cabinda, a proteção regular contra avarias e extravio com garantia de reembolso de 100% **já está incluída no serviço contratado**.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se houver dúvida sobre apólices especiais adicionais ou se não houver informação oficial no sistema:
+«“Não tenho informação suficiente para confirmar se o seguro está incluído no valor do frete ou se é cobrado separadamente. Consulte a nossa equipa antes de contratar o serviço.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Qual o procedimento para receber reembolso?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'reembolso-mercadoria-danificada',
+    category: 'segurança',
+    question: 'Qual é o procedimento e prazo para receber o reembolso se a mercadoria chegar danificada?',
+    keywords: ['procedimento e prazo para receber o reembolso', 'reembolso se a mercadoria chegar danificada', 'como receber reembolso', 'prazo de reembolso', 'mercadoria danificada'],
+    shortAnswer: 'Notificação imediata no ato de receção, análise técnica em 48h e reembolso integral de 100% ou reposição do artigo.',
+    detailedAnswer: `O procedimento oficial para situações de avaria ou dano sofrido no transporte é:
+
+1. **Notificação Imediata:** Fotografar e reportar o dano no ato da receção no Armazém C-4 ou momento da entrega ao domicílio.
+2. **Análise Técnica:** A equipa do Mediador avalia a ocorrência no prazo de até 48 horas úteis.
+3. **Liquidação do Reembolso:** Confirmada a avaria de trânsito, processa-se a devolução de 100% do valor pago ou a reposição do artigo.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Caso não haja informação ou política específica cadastrada para o seu tipo de carga:
+«“O procedimento e o prazo para eventual reembolso ou indemnização dependem da política aplicável à carga. Para obter uma resposta correta, consulte um atendente humano.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Como acionar a garantia de reembolso?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'transporte-itens-frageis-pereciveis',
+    category: 'servicos',
+    question: 'Como funciona o transporte de itens frágeis ou perecíveis?',
+    keywords: ['transporte de itens fragais', 'transporte de itens frageis', 'produtos frageis', 'itens frageis', 'pereciveis', 'produtos pereciveis'],
+    shortAnswer: 'Frágeis exigem embalagem reforçada e rotulagem; perecíveis exigem confirmação prévia de prazos e conservação.',
+    detailedAnswer: `Para mercadorias frágeis ou perecíveis:
+
+• **Produtos Frágeis:** Aceitamos mediante embalamento de proteção reforçada (caixas de madeira, plástico bolha, paletização) e rotulagem visível "FRÁGIL".
+• **Produtos Perecíveis:** Sujeitos à validação do tempo útil de conservação térmica face ao prazo marítimo ou aéreo.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se as regras específicas para o seu produto frágil/perecível não estiverem cadastradas:
+«“O transporte de produtos frágeis ou perecíveis pode depender de condições específicas. Para confirmar se a sua mercadoria pode ser transportada e quais cuidados são necessários, consulte a nossa equipa.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Vocês transportam congelados ou refrigerados?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'rastreio-tempo-real-viagem',
+    category: 'rastreio',
+    question: 'É possível rastrear a carga em tempo real durante a viagem?',
+    keywords: ['rastrear a carga em tempo real', 'rastreamento em tempo real', 'tempo real durante a viagem', 'gps em tempo real'],
+    shortAnswer: 'O sistema fornece acompanhamento por código MED-XXXX através de 9 etapas operacionais e atualizações de estado.',
+    detailedAnswer: `O sistema do Mediador Cabinda fornece o acompanhamento por **código único MED-XXXX** através de 9 etapas de progresso (Recebido ➔ Análise ➔ Orçado ➔ Pago ➔ Comprado ➔ Em Trânsito ➔ Atracado ➔ No Armazém ➔ Entregue), com registo da última atualização oficial dos nossos operadores portuários.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+O rastreamento refere-se a atualizações de estados operacionais. Se pretender informações que não constem no sistema:
+«“O nosso sistema não possui informação suficiente para confirmar rastreamento em tempo real desta carga. Consulte a nossa equipa para saber como acompanhar o envio.”»`,
+    suggestedNextQuestions: ['Como rastrear meu pedido MED-XXXX no app?', 'Falar com a equipa no WhatsApp (+244 942 043 293)'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'responsavel-legal-blitz-retencao-fiscal',
+    category: 'segurança',
+    question: 'Quem é o responsável legal se houver blitz policial ou retenção fiscal na estrada?',
+    keywords: ['responsavel legal', 'blitz policial', 'retencao fiscal', 'retenção fiscal', 'apreensao fiscal', 'fiscalizacao na estrada'],
+    shortAnswer: 'A responsabilidade depende das circunstâncias, documentação e contrato. Emitimos Guia AGT para conformidade total.',
+    detailedAnswer: `O Mediador Cabinda opera em inteira conformidade legal com a emissão da **Guia de Trânsito fiscal da AGT** e faturas comerciais com NIF.
+
+⚠️ **Resposta Oficial Obrigatória:**
+«“A responsabilidade em caso de fiscalização, retenção ou intervenção das autoridades depende das circunstâncias da carga, da documentação apresentada e das responsabilidades definidas entre as partes. Para uma orientação correta sobre este caso, consulte a nossa equipa ou um atendente humano.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Quais são os documentos necessários para o envio?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'documentos-remetente-destinatario',
+    category: 'documentos',
+    question: 'Quais são os documentos necessários que o remetente e o destinatário devem apresentar?',
+    keywords: ['documentos necessarios que o remetente', 'documentos para remetente e destinatario', 'documentos para envio e recepcao', 'documentos obrigatorios'],
+    shortAnswer: 'Fatura comercial com NIF do fornecedor, Guia de Trânsito AGT e BI/Passaporte/Alvará com código MED-XXXX para levantamento.',
+    detailedAnswer: `Os documentos oficiais definidos para o serviço padrão incluem:
+
+• **Remetente/Comprador:** Fatura comercial com NIF emitida pelo fornecedor em Luanda/Cabinda.
+• **Serviço de Transporte:** Guia de Trânsito oficial emitida pela AGT pelo Mediador Cabinda.
+• **Destinatário para Levantamento:** Bilhete de Identidade (BI), Passaporte ou Alvará do titular, acompanhado do código MED-XXXX (ou procuração autorizada se retirado por terceiros).
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Se os documentos variarem conforme o tipo de carga ou destino, ou não estiverem cadastrados:
+«“Os documentos necessários podem variar de acordo com o tipo de carga e o destino. Para confirmar exatamente quais documentos são necessários para o seu envio, consulte a nossa equipa.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Como funciona a emissão de Guia de Trânsito AGT?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
+  },
+  {
+    id: 'nota-fiscal-recibo-transporte',
+    category: 'documentos',
+    question: 'A empresa emite nota fiscal ou recibo de transporte válido?',
+    keywords: ['emite nota fiscal', 'recibo de transporte', 'fatura valida', 'validade fiscal', 'nota fiscal ou recibo', 'comprovativo fiscal'],
+    shortAnswer: 'Sim, emitimos Fatura Pro-forma, Recibo com NIF corporativo, Fatura Comercial da loja e Guia de Trânsito AGT.',
+    detailedAnswer: `Sim! O Mediador Cabinda emite documentação legal válida em Angola:
+
+• **Fatura Pro-forma & Recibo de Liquidação:** Emitidos com NIF corporativo e discriminação de serviços.
+• **Fatura Comercial:** Obtida na compra física junto do fornecedor de Luanda com NIF do cliente/empresa.
+• **Guia de Trânsito AGT:** Documento fiscal oficial emitido para autorização de trânsito interprovincial.
+
+⚠️ **Instrução Oficial de Confiabilidade:**
+Caso necessite de confirmar um formato fiscal específico não cadastrado no sistema:
+«“Não tenho informação oficial cadastrada para confirmar qual documento de transporte é emitido neste serviço. Consulte um atendente humano para confirmar.”»`,
+    suggestedNextQuestions: ['Falar com a equipa no WhatsApp (+244 942 043 293)', 'Quais documentos o destinatário precisa apresentar?'],
+    isActive: true,
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema Oficial'
   }
 ];
 
@@ -1033,7 +1401,8 @@ ${activeKnowledge.map(k => `[${k.category.toUpperCase()}] P: ${k.question}\nR: $
 export function solveBotQueryLocally(
   userQuery: string,
   customKnowledgeBase?: DynamicKnowledgeItem[],
-  customLogistics?: GeneralLogisticsSettings
+  customLogistics?: GeneralLogisticsSettings,
+  attachments?: any[]
 ): {
   text: string;
   suggestedQuestions: string[];
@@ -1046,6 +1415,34 @@ export function solveBotQueryLocally(
   const airTime = logistics.modes.aereo.averageTime || logistics.modes.aereo.estimatedDays || '2 dias';
   const seaTime = logistics.modes.maritimo.averageTime || logistics.modes.maritimo.estimatedDays || '6 a 8 dias';
   const landTime = logistics.modes.terrestre.averageTime || logistics.modes.terrestre.estimatedDays || '15 a 20 dias';
+
+  const hasAttachments = Boolean(attachments && attachments.length > 0);
+
+  // 0. Custom Supplier / Gallery Photo Intermediation (Client has own supplier & attaches photo or asks to mediate safely)
+  if (hasAttachments || /(meu fornecedor|fornecedor pr[óo]prio|fornecedor externo|tenho fornecedor|foto da galeria|foto do fornecedor|foto do produto|anexar foto|anexei foto|comprar com meu fornecedor|intermediar com meu fornecedor|mediar o neg[óo]cio|mediar negocio|seguran[çc]a|evitar burla|proforma do fornecedor|comprar de forma segura|comprar em seguran[çc]a)/i.test(normalized)) {
+    return {
+      text: `${hasAttachments ? '📸 **Foto(s) do Fornecedor / Produto recebida(s) com sucesso!**\n\n' : ''}Sim, o **Mediador Cabinda Lda** realiza a **Intermediação Segura com Fornecedores Próprios do Cliente** em Luanda e outras províncias, garantindo **100% de proteção contra fraudes, burlas financeiras e peças falsificadas ou danificadas**:
+
+🛡️ **Protocolo Oficial de Segurança para o seu Fornecedor:**
+1. 🏬 **Vistoria Física Presencial em Luanda:** A nossa equipa operacional vai pessoalmente até à loja, armazém, feira ou bancada do seu fornecedor (ex.: Mercado São Paulo, Kikolo, Viana, Belas, Talatona) para conferir a existência real do fornecedor e testar o funcionamento do produto.
+2. 🔒 **Custódia Caução Anti-Burla:** O cliente não transfere dinheiro a desconhecidos. O seu pagamento fica guardado em segurança na conta institucional do Mediador Cabinda. O valor só é libertado ao fornecedor **após a nossa equipa ter a mercadoria física nas mãos com fatura comercial com NIF**.
+3. 📄 **Emissão de Guia de Trânsito AGT:** Regularizamos toda a documentação fiscal e aduaneira para trânsito interprovincial legal sem risco de apreensão fiscal.
+4. 🚢 **Embalamento e Transporte Protegido:** Carga embalada e despachada para Cabinda (${logistics.pickupAddressCabinda}) ou qualquer província, com código de rastreamento **MED-XXXX** e garantia de reembolso integral de 100%.
+
+👉 **Próximo Passo:** Pode clicar no botão abaixo para **Criar o Pedido de Intermediação** com os dados do seu fornecedor e as fotos anexadas!`,
+      suggestedQuestions: [
+        'Como criar pedido com meu próprio fornecedor?',
+        'Quais são as taxas de intermediação e vistoria?',
+        'Como funciona o pagamento por Multicaixa Express (942043293) ou IBAN?',
+        'Quais são os prazos de entrega marítimos e aéreos?'
+      ],
+      actionLink: {
+        label: 'Criar Pedido com este Fornecedor',
+        view: 'fazer-pedido',
+        icon: '🛡️'
+      }
+    };
+  }
 
   // 1. Simple Greetings
   if (/^(ol[aá]|oi|bom dia|boa tarde|boa noite|cumprimentos|sauda[cç][oõ]es|alo|alô|hello|hi)\b/i.test(normalized)) {
@@ -1104,6 +1501,33 @@ Como posso ajudá-lo hoje?`,
       ],
       actionLink: {
         label: 'Abrir Chat de Suporte',
+        view: 'suporte',
+        icon: '💬'
+      }
+    };
+  }
+
+  // 2b. Escalation Triggers for Mandatory Human Handover (Regra de Escalonamento)
+  const isHumanEscalationNeeded = /(carga danificada|produto estragado|perdi a carga|extravio|reclamacao formal|reclamação formal|retencao policial|retenção fiscal|agt apreendeu|processar a empresa|impugnar cobranca|contestacao|excecao as regras|desconto especial fora da tabela|reclamacao de valor|valor incorreto)/i.test(normalized);
+
+  if (isHumanEscalationNeeded) {
+    return {
+      text: `Para lhe dar uma informação correta e evitar fornecer um valor ou condição incorreta, preciso que esta questão seja confirmada pela nossa equipa. Por favor, fale com um atendente humano.
+
+📞 **Canais de Atendimento Humano Imediato:**
+• **WhatsApp Oficial:** [+244 942 043 293](https://wa.me/244942043293)
+• **Rede Unitel:** [+244 942 043 293](tel:+244942043293)
+• **Rede Movicel:** [+244 998 100 940](tel:+244998100940)
+• **E-mail Institucional:** [equipemediadorcabindacabinda@gmail.com](mailto:equipemediadorcabindacabinda@gmail.com)
+
+A nossa equipa tratará do seu caso com prioridade.`,
+      suggestedQuestions: [
+        'Falar com a equipa no WhatsApp (+244 942 043 293)',
+        'Onde fica o Armazém C-4 em Cabinda?',
+        'Como funciona a garantia de 100% de reembolso?'
+      ],
+      actionLink: {
+        label: 'Falar com Atendimento Humano',
         view: 'suporte',
         icon: '💬'
       }
