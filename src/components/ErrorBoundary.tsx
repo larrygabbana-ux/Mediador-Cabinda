@@ -4,7 +4,7 @@
  */
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { RefreshCw, AlertTriangle, Home } from 'lucide-react';
+import { RefreshCw, AlertTriangle, ShieldCheck, Home } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -15,82 +15,82 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
-  errorInfo: ErrorInfo | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
-    error: null,
-    errorInfo: null
+    error: null
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null
-    };
+    return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('[ErrorBoundary] Caught render crash:', error, errorInfo);
-    this.setState({ errorInfo });
+    console.error('[Mediador Cabinda ErrorBoundary Caught]', error, errorInfo);
   }
 
-  private handleReload = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+  public handleReset = () => {
+    this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
       this.props.onReset();
+    } else {
+      window.location.reload();
     }
-  };
-
-  private handleHardReload = () => {
-    window.location.reload();
   };
 
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-[400px] w-full flex items-center justify-center p-4 sm:p-8 bg-slate-50/75 rounded-2xl border border-slate-200 text-slate-800 animate-fade-in my-4">
-          <div className="max-w-lg w-full bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-lg text-center space-y-4">
-            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
-              <AlertTriangle className="w-7 h-7" />
+        <div className="min-h-[400px] flex items-center justify-center p-6 bg-slate-50 text-slate-800">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-200 text-center space-y-4 animate-scale-up">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <AlertTriangle className="w-8 h-8" />
             </div>
 
-            <div className="space-y-1">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 font-display">
-                {this.props.fallbackTitle || 'Recuperação Automática de Interface'}
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-black text-slate-900 font-display">
+                {this.props.fallbackTitle || 'Recuperação Automática de Ecrã'}
               </h3>
-              <p className="text-xs sm:text-sm text-slate-500">
-                Ocorreu uma pequena instabilidade momentânea ao carregar esta aba. Os seus dados e encomendas estão 100% seguros e guardados no sistema.
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Ocorreu uma pequena instabilidade de carregamento nesta aba. Os seus dados e pedidos permanecem 100% seguros e preservados.
               </p>
             </div>
 
             {this.state.error && (
-              <div className="text-left bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px] font-mono text-slate-600 overflow-x-auto max-h-28">
-                {this.state.error.message || 'Erro de renderização recuperado com sucesso.'}
+              <div className="bg-slate-100 p-3 rounded-xl text-left overflow-x-auto max-h-24 text-[10px] font-mono text-slate-600 border border-slate-200">
+                {this.state.error.message || 'Erro inesperado de renderização'}
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2.5 pt-2 justify-center">
+            <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
               <button
                 type="button"
-                onClick={this.handleReload}
-                className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={this.handleReset}
+                className="w-full sm:w-auto px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
-                Recarregar Aba
+                <span>Recarregar Aba</span>
               </button>
 
               <button
                 type="button"
-                onClick={this.handleHardReload}
-                className="w-full sm:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  this.setState({ hasError: false, error: null });
+                  window.location.hash = '';
+                  window.location.reload();
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Home className="w-4 h-4" />
-                Atualizar Aplicação
+                <span>Início</span>
               </button>
+            </div>
+
+            <div className="flex items-center justify-center gap-1 text-[10px] text-emerald-600 font-bold pt-2 border-t border-slate-100">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Ponte Logística Luanda ⇄ Cabinda Ativa</span>
             </div>
           </div>
         </div>

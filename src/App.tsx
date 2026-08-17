@@ -820,117 +820,136 @@ export default function App() {
   };
 
   // CROSS-DEVICE REAL-TIME SYNCHRONIZATION
+  const [syncStatus, setSyncStatus] = useState<'connected' | 'syncing' | 'offline'>('connected');
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+
+  const performSync = async () => {
+    try {
+      setSyncStatus('syncing');
+      const remote = await fetchServerState();
+      if (!remote) {
+        setSyncStatus('offline');
+        return;
+      }
+      setSyncStatus('connected');
+      setLastSyncTime(Date.now());
+
+      // 1. Sync Orders across devices (sorted with newest first)
+      if (Array.isArray(remote.orders) && remote.orders.length > 0) {
+        setOrders(prev => {
+          const orderMap = new Map<string, Order>(prev.map(o => [o.id, o]));
+          let changed = false;
+
+          (remote.orders as Order[]).forEach(remOrd => {
+            if (!remOrd || !remOrd.id) return;
+            if (!orderMap.has(remOrd.id)) {
+              changed = true;
+              orderMap.set(remOrd.id, remOrd);
+            } else {
+              const cur = orderMap.get(remOrd.id)!;
+              const curTime = cur.updatedAt || cur.createdAt || '';
+              const remTime = remOrd.updatedAt || remOrd.createdAt || '';
+              if (remTime > curTime || JSON.stringify(cur) !== JSON.stringify(remOrd)) {
+                changed = true;
+                orderMap.set(remOrd.id, { ...cur, ...remOrd });
+              }
+            }
+          });
+
+          if (changed) {
+            const merged = Array.from(orderMap.values()).sort(
+              (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+            saveOrders(merged);
+            return merged;
+          }
+          return prev;
+        });
+      }
+
+      // 2. Sync Clients across devices
+      if (Array.isArray(remote.clients) && remote.clients.length > 0) {
+        setClients(prev => {
+          const clientMap = new Map<string, Client>(prev.map(c => [c.id, c]));
+          let changed = false;
+          (remote.clients as Client[]).forEach(remCli => {
+            if (!remCli || !remCli.id) return;
+            if (!clientMap.has(remCli.id)) {
+              changed = true;
+              clientMap.set(remCli.id, remCli);
+            } else {
+              const cur = clientMap.get(remCli.id)!;
+              if (JSON.stringify(cur) !== JSON.stringify(remCli)) {
+                changed = true;
+                clientMap.set(remCli.id, { ...cur, ...remCli });
+              }
+            }
+          });
+          if (changed) {
+            const merged = Array.from(clientMap.values());
+            saveClients(merged);
+            return merged;
+          }
+          return prev;
+        });
+      }
+
+      // 3. Sync Messages across devices
+      if (Array.isArray(remote.messages) && remote.messages.length > 0) {
+        setMessages(prev => {
+          const msgMap = new Map<string, Message>(prev.map(m => [m.id, m]));
+          let changed = false;
+          (remote.messages as Message[]).forEach(remMsg => {
+            if (!remMsg || !remMsg.id) return;
+            if (!msgMap.has(remMsg.id)) {
+              changed = true;
+              msgMap.set(remMsg.id, remMsg);
+            }
+          });
+          if (changed) {
+            const merged = Array.from(msgMap.values());
+            saveMessages(merged);
+            return merged;
+          }
+          return prev;
+        });
+      }
+
+      // 4. Sync Service Requests
+      if (Array.isArray(remote.serviceRequests) && remote.serviceRequests.length > 0) {
+        setServiceRequests(prev => {
+          const reqMap = new Map<string, ServiceRequest>(prev.map(r => [r.id, r]));
+          let changed = false;
+          (remote.serviceRequests as ServiceRequest[]).forEach(remReq => {
+            if (!remReq || !remReq.id) return;
+            if (!reqMap.has(remReq.id)) {
+              changed = true;
+              reqMap.set(remReq.id, remReq);
+            }
+          });
+          if (changed) {
+            const merged = Array.from(reqMap.values());
+            saveServiceRequests(merged);
+            return merged;
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      setSyncStatus('offline');
+    }
+  };
+
+  const handleTriggerManualSync = async () => {
+    setIsManualSyncing(true);
+    await performSync();
+    setTimeout(() => setIsManualSyncing(false), 800);
+    speakText("Dados sincronizados com o servidor central.");
+  };
+
   useEffect(() => {
     let isMounted = true;
-
-    const performSync = async () => {
-      try {
-        const remote = await fetchServerState();
-        if (!remote || !isMounted) return;
-
-        // 1. Sync Orders across devices
-        if (Array.isArray(remote.orders) && remote.orders.length > 0) {
-          setOrders(prev => {
-            const orderMap = new Map<string, Order>(prev.map(o => [o.id, o]));
-            let changed = false;
-
-            (remote.orders as Order[]).forEach(remOrd => {
-              if (!remOrd || !remOrd.id) return;
-              if (!orderMap.has(remOrd.id)) {
-                changed = true;
-                orderMap.set(remOrd.id, remOrd);
-              } else {
-                const cur = orderMap.get(remOrd.id)!;
-                const curTime = cur.updatedAt || cur.createdAt || '';
-                const remTime = remOrd.updatedAt || remOrd.createdAt || '';
-                if (remTime > curTime || JSON.stringify(cur) !== JSON.stringify(remOrd)) {
-                  changed = true;
-                  orderMap.set(remOrd.id, { ...cur, ...remOrd });
-                }
-              }
-            });
-
-            if (changed) {
-              const merged = Array.from(orderMap.values());
-              saveOrders(merged);
-              return merged;
-            }
-            return prev;
-          });
-        }
-
-        // 2. Sync Clients across devices
-        if (Array.isArray(remote.clients) && remote.clients.length > 0) {
-          setClients(prev => {
-            const clientMap = new Map<string, Client>(prev.map(c => [c.id, c]));
-            let changed = false;
-            (remote.clients as Client[]).forEach(remCli => {
-              if (!remCli || !remCli.id) return;
-              if (!clientMap.has(remCli.id)) {
-                changed = true;
-                clientMap.set(remCli.id, remCli);
-              } else {
-                const cur = clientMap.get(remCli.id)!;
-                if (JSON.stringify(cur) !== JSON.stringify(remCli)) {
-                  changed = true;
-                  clientMap.set(remCli.id, { ...cur, ...remCli });
-                }
-              }
-            });
-            if (changed) {
-              const merged = Array.from(clientMap.values());
-              saveClients(merged);
-              return merged;
-            }
-            return prev;
-          });
-        }
-
-        // 3. Sync Messages across devices
-        if (Array.isArray(remote.messages) && remote.messages.length > 0) {
-          setMessages(prev => {
-            const msgMap = new Map<string, Message>(prev.map(m => [m.id, m]));
-            let changed = false;
-            (remote.messages as Message[]).forEach(remMsg => {
-              if (!remMsg || !remMsg.id) return;
-              if (!msgMap.has(remMsg.id)) {
-                changed = true;
-                msgMap.set(remMsg.id, remMsg);
-              }
-            });
-            if (changed) {
-              const merged = Array.from(msgMap.values());
-              saveMessages(merged);
-              return merged;
-            }
-            return prev;
-          });
-        }
-
-        // 4. Sync Service Requests
-        if (Array.isArray(remote.serviceRequests) && remote.serviceRequests.length > 0) {
-          setServiceRequests(prev => {
-            const reqMap = new Map<string, ServiceRequest>(prev.map(r => [r.id, r]));
-            let changed = false;
-            (remote.serviceRequests as ServiceRequest[]).forEach(remReq => {
-              if (!remReq || !remReq.id) return;
-              if (!reqMap.has(remReq.id)) {
-                changed = true;
-                reqMap.set(remReq.id, remReq);
-              }
-            });
-            if (changed) {
-              const merged = Array.from(reqMap.values());
-              saveServiceRequests(merged);
-              return merged;
-            }
-            return prev;
-          });
-        }
-      } catch (err) {
-        // Silently handle offline/local deviations
-      }
-    };
 
     // Seed local data to server on startup
     const seedLocalToServer = async () => {
@@ -948,13 +967,19 @@ export default function App() {
       } catch {}
     };
 
-    seedLocalToServer().then(() => performSync());
+    seedLocalToServer().then(() => {
+      if (isMounted) performSync();
+    });
 
     // Continuous real-time cross-device poll (every 3 seconds)
-    const pollInterval = setInterval(performSync, 3000);
+    const pollInterval = setInterval(() => {
+      if (isMounted) performSync();
+    }, 3000);
 
     // Sync immediately when user switches tabs or focuses phone screen
-    const handleSyncFocus = () => performSync();
+    const handleSyncFocus = () => {
+      if (isMounted) performSync();
+    };
     window.addEventListener('focus', handleSyncFocus);
     window.addEventListener('visibilitychange', handleSyncFocus);
 
@@ -1440,6 +1465,26 @@ export default function App() {
 
           {/* RIGHT ACTION CONTROLS: CONSOLIDATED NOTIFICATIONS + RETURN TO CLIENT FOR ADMIN */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Live Cloud Sync Indicator & Manual Trigger */}
+            <button
+              onClick={handleTriggerManualSync}
+              disabled={isManualSyncing}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border ${
+                syncStatus === 'connected'
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/30 hover:bg-emerald-900/60'
+                  : syncStatus === 'syncing'
+                    ? 'bg-amber-950/60 text-amber-300 border-amber-500/30 animate-pulse'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+              title="Sincronização em Tempo Real entre Dispositivos (Luanda / Cabinda). Clique para atualizar agora."
+              id="header-cloud-sync-btn"
+            >
+              <RotateCcw className={`w-3 h-3 ${isManualSyncing || syncStatus === 'syncing' ? 'animate-spin text-amber-400' : 'text-emerald-400'}`} />
+              <span className="hidden sm:inline">
+                {isManualSyncing ? 'Sincronizando...' : syncStatus === 'connected' ? 'Sincronizado' : 'Atualizar'}
+              </span>
+            </button>
+
             {role === 'client' && isAuthorized && (
               <>
                 {/* AI Chatbot quick trigger */}

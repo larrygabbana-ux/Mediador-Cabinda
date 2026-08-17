@@ -984,7 +984,7 @@ export default function AdminDashboard({
     showModalAlert('Venda Removida', 'A venda do colaborador foi removida e as comissões pendentes foram recalculadas.', 'warning');
   };
 
-  const activeOrder = orders.find(o => o.id === selectedOrderId);
+  const activeOrder = orders.find(o => o.id === selectedOrderId) || orders[0];
 
   // Admin Order Edit Modal State
   const [isEditingOrderModalOpen, setIsEditingOrderModalOpen] = useState(false);
@@ -1357,10 +1357,12 @@ _Mediador Cabinda Lda — A sua ponte comercial segura entre Luanda e Cabinda._`
     setNewCarrier({ name: '', phone: '', baseRatePerKg: 1000, expectedDays: 4 });
   };
 
-  const filteredOrders = orders.filter((o) => {
-    if (orderFilter === 'TODOS') return true;
-    return o.status === orderFilter;
-  });
+  const filteredOrders = [...orders]
+    .filter((o) => {
+      if (orderFilter === 'TODOS') return true;
+      return o.status === orderFilter;
+    })
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   return (
     <div className="space-y-6 pb-28" id="admin-dashboard-root">
